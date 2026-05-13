@@ -1,0 +1,117 @@
+# ===============================
+# Python
+# ===============================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ===============================
+# Virtual environments
+# ===============================
+.venv/
+venv/
+env/
+ENV/
+
+# ===============================
+# TensorFlow / Keras
+# ===============================
+# Saved models
+*.h5
+*.keras
+saved_models/
+checkpoints/
+logs/
+
+# TensorBoard
+runs/
+tb_logs/
+
+# ===============================
+# Data / Datasets
+# ===============================
+data/
+datasets/
+mnist_data/
+
+# ===============================
+# Jupyter
+# ===============================
+.ipynb_checkpoints/
+
+# ===============================
+# PyCharm
+# ===============================
+.idea/
+*.iml
+
+# ===============================
+# VS Code (opsiyonel)
+# ===============================
+.vscode/
+
+# ===============================
+# OS files
+# ===============================
+.DS_Store
+Thumbs.db
+
+# ===============================
+# Experiment / temp outputs
+# ===============================
+*.log
+*.tmp
+*.out
+
+# ===============================
+# Coverage / testing
+# ===============================
+.coverage
+htmlcov/
+.pytest_cache/
+
+# ===============================
+# Environment variables
+# ===============================
+.env
+.env.*
+
+# ===============================
+# Packaging
+# ===============================
+build/
+dist/
+*.egg-info/
+
+# ===============================
+# Diffusers / Hugging Face
+# ===============================
+.cache/
+.huggingface/
+hf_cache/
+hf_hub/
+models--*/
+
+# ===============================
+# Generated images / experiments
+# ===============================
+outputs/
+results/
+runs/
+
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# ===============================
+# Model weights (NEVER COMMIT)
+# ===============================
+*.ckpt
+*.safetensors
+*.bin
+*.pt
+
+!assets/
+!assets/*.png
+old_codes.txt
