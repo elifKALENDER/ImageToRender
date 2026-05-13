@@ -1,0 +1,13 @@
+# =============================================
+# ADIM 1: Önce bu dosyayı kur
+# pip install -r torch_install.txt
+# =============================================
+# torch + xformers — versiyon kilidi (değiştirme!)
+# xformers 0.0.27.post2 sadece torch==2.4.0 ile çalışır
+# =============================================
+
+--index-url https://download.pytorch.org/whl/cu121
+torch==2.4.0
+torchvision==0.19.0
+torchaudio==2.4.0
+xformers==0.0.27.post2

@@ -1,0 +1,17 @@
+name: ImageToRender_GPU
+channels:
+  - defaults
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+  - https://repo.anaconda.com/pkgs/msys2
+dependencies:
+  - python=3.10.19
+  - pip=25.3
+  - pip:
+      - -r requirements_GPU.txt
+
+# KURULUM SIRASI:
+# 1. conda env create -f environment.yml
+# 2. conda activate ImageToRender_GPU
+# 3. pip install -r torch_install.txt
+# 4. pip install -r requirements.txt
