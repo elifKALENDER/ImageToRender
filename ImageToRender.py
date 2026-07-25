@@ -187,17 +187,17 @@ def main():
         "a modern luxury nursing home, serene garden with walking paths and ergonomic benches, "
         "large minimalist glass extensions, warm sunlight, elderly-friendly landscape design, "
         "high-quality textures, 8k resolution, cinematic lighting, sharp details, exterior,dark red brick facade, gothic pointed arches," 
-        "preserved original stone masonry, keeping original materiality."
+        "preserved original stone masonry, keeping original materiality,blue sky, daylight, bright natural lighting."
     )
     negative = (
-        "low quality, dark, scary, messy, blurry, industrial, futuristic, distorted architecture,beige, cream, limestone, white walls, changed facade material."
+        "low quality, dark, scary, messy, blurry, industrial, futuristic, distorted architecture,beige, cream, limestone, white walls, changed facade material,red sky, dark sky, dramatic sky, overcast, night, dark shadows."
     )
 
     # --- Üretim Ayarları ---
-    steps           = 20
-    guidance_scale  = 7.0
-    control_strength = 0.85
-    seeds           = [42, 1001, 2024, 7777]
+    steps           = 30
+    guidance_scale  = 6.5
+    control_strength = 0.75
+    seeds           = [42, 1001, 2024, 31415]
 
     # --- Run Metadata ---
     run_meta = {
