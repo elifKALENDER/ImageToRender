@@ -270,3 +270,21 @@ pip freeze > requirements.txt
 # Bozulursa geri yükle:
 pip install -r requirements.txt
 ```
+
+## 10. KARARLI PARAMETRELER
+ # --- Üretim Ayarları ---
+    steps           = 30
+    guidance_scale  = 6.5
+    control_strength = 0.75
+    seeds           = [42, 1001, 2024, 31415]
+ # --- Prompt ---
+    prompt = (
+        "Photorealistic architectural render of a historical stone building converted into "
+        "a modern luxury nursing home, serene garden with walking paths and ergonomic benches, "
+        "large minimalist glass extensions, warm sunlight, elderly-friendly landscape design, "
+        "high-quality textures, 8k resolution, cinematic lighting, sharp details, exterior,dark red brick facade, gothic pointed arches," 
+        "preserved original stone masonry, keeping original materiality,blue sky, daylight, bright natural lighting."
+    )
+    negative = (
+        "low quality, dark, scary, messy, blurry, industrial, futuristic, distorted architecture,beige, cream, limestone, white walls, changed facade material,red sky, dark sky, dramatic sky, overcast, night, dark shadows."
+    )

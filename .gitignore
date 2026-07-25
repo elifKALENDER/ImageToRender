@@ -115,3 +115,4 @@ runs/
 !assets/
 !assets/*.png
 old_codes.txt
+/assets
