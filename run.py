@@ -24,14 +24,15 @@ from i2r.runio import STEPS, VIEWS, ContractError, Run
 
 
 # Each step is a module in i2r/ exposing run_step(run, opts). Modules are imported only when the
-# step runs, so a later step never pays for loading an earlier step's models. Steps not yet
-# implemented (tasks T17 to T21) only log their name.
+# step runs, so a later step never pays for loading an earlier step's models. Every step in
+# runio.STEPS now has a module; _stub remains for a step added to STEPS before its module.
 STEP_MODULES: dict[str, str] = {
     "detect": "i2r.detect",
     "review": "i2r.review",
     "damage": "i2r.damage",
     "evidence": "i2r.evidence",
     "complete": "i2r.complete",
+    "render": "i2r.render",
 }
 
 

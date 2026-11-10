@@ -320,6 +320,23 @@ building a restoration image is written and the count of completed targets equal
 records. No torch import is needed for this path.
 
 ### T17. `i2r/render.py`
+*Status: done. Deviations, both deliberate: the source map is written per view
+(`restoration_source_map.png`, later `first_construction_source_map.png`), and the label and legend go
+in a bar added under each image instead of on the photograph. Every marking (tone shift, inner outline,
+blue hatch for open tier B, red hatch for every other open damage pixel, region labels) is drawn on a
+layer copied in only inside the damage mask, so outside the mask each view image equals the photograph
+(tested); a region label is drawn only where it fits wholly inside its region. Render also refuses a
+changed pixel without a source label. `provenance.json` has the §5.6 fields plus `kind`, `rule`,
+`element_id`, `evidence_reason`, per-view `views`, `view_reasons`, `pixels_changed` and `alignment`, and
+the hashes of the photograph and the damage mask. Results on s01 (n = 1): from the imported inventory
+(`python run.py --structure s01_test_church --from complete --view restoration --no-review`, run
+`outputs/s01_test_church/20261110_175655`), 21 targets in `provenance.json`, 6 completed. The
+acceptance command from raw detection (run `20261110_175724`) also produces every file: 48 detections,
+43 targets (8 A, 6 B, 29 C), 7 completed; the eighth is `completed_but_empty` because a more confident
+overlapping target painted over all its pixels. That run completes large areas from oversized detector
+boxes (one target changes 18,570 pixels) and is not a result to show; it shows why T14 to T18 use the
+inventory. The blue B hatch is hard to see over the dark interior of the central collapse, and the two
+B slots (23 px wide) are too narrow for a label; the legend carries it.*
 **What.** Produce, per run: `restoration.png` (additions with tone shift and thin outline; B and C
 regions hatched and labelled as in §5.3), `provenance.json` (§5.6), `source_map.png`, an overlay of
 elements and targets, and a legend. Stamp every image with "AI proposal, not a restoration decision".

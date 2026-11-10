@@ -161,7 +161,8 @@ restoration:
   outline_px: 1
   outline_color: [255, 255, 255]
   hatch_spacing_px: 8
-  hatch_color: [220, 60, 60]
+  hatch_color: [220, 60, 60]        # tier C: no evidence
+  hatch_color_b: [70, 130, 230]     # tier B when not restored: position implied
   label: "AI proposal, not a restoration decision"
 
 first_construction:
