@@ -15,7 +15,8 @@
 | File | Tracked in git | Notes |
 |---|---|---|
 | `image.png` | No | RGB. Pixel-identical to `input.png` of every earlier run. |
-| `damage_mask.png` | No | Drawn by the author; 17.3 % of pixels marked. Byte-identical to the `completion_mask.png` used by every earlier run. |
+| `damage_mask.png` | No | Version 2 (2026-11-10, SHA-256 starts `0fcd1467c78183ec`), 17.8 % of pixels marked: version 1 plus two rectangles added at the author's request after T13, over the damaged lower ends of the two pilasters the expert labelled fragmented but the mask missed: x 70-96, y 562-615 (`recovered_pilaster_020`, shaft foot and missing base) and x 227-254, y 555-617 (`recovered_pilaster_022`, broken shaft foot and eroded base block). Extents are the assistant's reading of the 628 x 904 photograph; the author may refine them with `tools/mask_editor.py`. |
+| `damage_mask_v1_before_T13.png` | No | Version 1 (SHA-256 starts `bf0c797e88b9593c`): drawn by the author; 17.3 % of pixels marked. Byte-identical to the `completion_mask.png` used by every earlier run. |
 
 ## Open actions
 

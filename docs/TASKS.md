@@ -212,7 +212,12 @@ mask by 0.07 and 0.11 because their masks are editor boxes and the drawn mask is
 mask does not include whatever damage the expert saw on them. The threshold was not tuned to remove
 these (n = 1); the second pair is for the author: either extend `damage_mask.png` over those two
 pilasters or accept that they are not completed. The automatic proposal on s01 marks 2.2 % of the image
-and has IoU 0.00 with the drawn mask (it finds dark openings, not losses): do not rely on it.*
+and has IoU 0.00 with the drawn mask (it finds dark openings, not losses): do not rely on it.
+Follow-up (author's decision): the s01 mask was extended over the damaged lower ends of
+`recovered_pilaster_020` and `recovered_pilaster_022` (mask version 2, details in the building's
+`SOURCE.md`). Re-run `outputs/s01_test_church/20261110_173011`: 17.8 % of the image, 5 regions,
+10 intact / 13 fragmented, **21 of 23 agree**; only the two box-mask pilasters remain. Use this run
+for T14 onwards.*
 **What.** (a) Copy `create_mask_with_editor()` and its helpers from `archive/inpaint/inpaint_v3.py` into a
 standalone `tools/mask_editor.py` that imports only Pillow, numpy and Tkinter, with
 `--image`, `--out` and an optional `--propose` flag that pre-loads the automatic dark-region proposal
