@@ -33,9 +33,9 @@ support, never a restoration decision. The owner is an architect and writes in T
 - Decide on sensible defaults and say what you chose. Ask only for what is the author's to decide (building identity, licence, merging into main, damage mask for s02).
 
 ## Layout
-`run.py` entry point; `config.yaml`; `i2r/` modules (`runio`, `detect`, `review`, `damage`, `evidence`, `complete`, `render`); `tools/` (`check_env`, `inventory_editor`, `editor_adapter`, `mask_editor`); `evaluation/evaluate.py`; `tests/`; `data/structures/<id>/`; `docs/`; `archive/`; `outputs/` and `assets/` (local, untracked).
+`run.py` entry point; `config.yaml`; `i2r/` modules (`runio`, `detect`, `review`, `damage`, `evidence`, `complete`, `render`); `tools/` (`check_env`, `inventory_editor`, `editor_adapter`, `mask_editor`, `refine_masks`); `evaluation/evaluate.py`; `tests/`; `data/structures/<id>/`; `docs/`; `archive/`; `outputs/` and `assets/` (local, untracked).
 
 ## Current state
 - Detect (OWL-ViT + SAM), review, editor adapter, mask editor, damage, evidence (tiers A, B, C) donor transfer and rendering of the restoration view are done (s01: 6 A, 2 B, 13 C; 6 of 6 A completed; T14 to T17 notes). The first-construction view is T18. s01 damage labels agree with the expert on 21 of 23 elements after the mask was extended (T13 note; mask version 2). s01 recall against the expert inventory: 52 % class-aware (RND-001, n = 1).
-- Use the imported 23-element inventory of s01 (T12 note in `docs/TASKS.md`), not raw detections, to develop T14-T18.
+- Use the imported 23-element inventory of s01 with SAM masks (T16b note in `docs/TASKS.md`; run `outputs/s01_test_church/20261110_181452` or later), not raw detections, to develop T18 onwards.
 - Open author items: building identity/source/licence and larger copies of both photos; merge into `main`; deleting local branch `backup-before-rewrite`; s02 damage mask. Decision 2026-11-10: work on s01 only until the pipeline is complete; s02 gets its own later session.

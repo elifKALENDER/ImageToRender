@@ -4,23 +4,32 @@ Input:
     data/structures/<id>/damage_mask.png   white = damaged or missing (draw with tools/mask_editor.py)
     elements.json and element_masks/       from detect / review (or tools/editor_adapter.py)
 
-Rule (docs/ARCHITECTURE.md §5.1): for every element that is not rejected,
+Rule (docs/ARCHITECTURE.md §5.1: fragmented = "overlapping the damage mask, or cut by it"), for every
+element that is not rejected:
     overlap = |element mask AND damage mask| / |element mask|
-    overlap <  damage.intact_max_overlap  ->  "intact"
-    overlap >= damage.intact_max_overlap  ->  "fragmented"
+    contact = share of the mask's edge pixels within damage.cut_margin_px of a damage pixel
+    overlap >= damage.intact_max_overlap  ->  "fragmented" (damage_reason "overlap")
+    contact >= damage.cut_min_contact and box overlap >= damage.intact_max_overlap
+                                          ->  "fragmented" (damage_reason "cut")
+    otherwise                             ->  "intact"
+The cut test (added in T16b) matters for masks that cover only the visible part of an element (SAM):
+their overlap stays small even when half the element is gone. Contact alone is not enough: an intact
+element merely bordering a loosely drawn mask touches it too. A cut element continues into the damage,
+so its box (the element's full extent, as drawn by the expert) must also reach into the damage.
 Rejected elements get no status. A damage region is an 8-connected component of the damage mask;
 components smaller than damage.min_region_px are listed as ignored, not as regions.
 
 Output in the run folder:
     damage_mask.png            copy of the mask used (so later steps read only the run folder)
-    elements.json              each active element gains damage_status, damage_overlap, damage_box_overlap
+    elements.json              each active element gains damage_status, damage_reason, damage_overlap,
+                               damage_contact, damage_box_overlap
     damage_regions.json        regions, per-region element overlap, uncovered pixels, summary
     damage_regions/<id>.png    one 0/255 mask per region
     damage_overlay.png         damage tinted, intact elements green, fragmented elements red
 
 ``damage_box_overlap`` (the same share for the element's box) is recorded for diagnosis only. A SAM
 mask covers the visible part of an element, so a cut element can have a small mask overlap and a large
-box overlap; the label uses the mask, as §5.1 says.
+box overlap; the label uses the mask and the cut test.
 """
 from __future__ import annotations
 
@@ -94,8 +103,27 @@ def box_mask(box: list[int], shape: tuple[int, int]) -> np.ndarray:
     return out
 
 
-def label(overlap: float, intact_max_overlap: float) -> str:
-    return INTACT if overlap < intact_max_overlap else FRAGMENTED
+def label(overlap: float, intact_max_overlap: float, contact: float = 0.0, cut_min_contact: float = 1.01,
+          box_overlap: float = 0.0) -> tuple[str, str | None]:
+    """(status, reason): reason is "overlap", "cut" or None."""
+    if overlap >= intact_max_overlap:
+        return FRAGMENTED, "overlap"
+    if contact >= cut_min_contact and box_overlap >= intact_max_overlap:
+        return FRAGMENTED, "cut"
+    return INTACT, None
+
+
+def edge_contact(mask: np.ndarray, damage: np.ndarray, margin_px: int) -> float:
+    """Share of the mask's edge pixels (in the mask, next to a non-mask pixel) that lie within
+    ``margin_px`` of a damage pixel."""
+    m = (mask > 0).astype(np.uint8)
+    edge = (m > 0) & (cv2.erode(m, np.ones((3, 3), np.uint8)) == 0)
+    n = int(edge.sum())
+    if n == 0:
+        return 0.0
+    k = 2 * max(0, int(margin_px)) + 1
+    near = cv2.dilate((damage > 0).astype(np.uint8), np.ones((k, k), np.uint8)) > 0
+    return float((edge & near).sum()) / n
 
 
 def split_regions(damage: np.ndarray, min_region_px: int) -> tuple[list[dict[str, Any]], list[np.ndarray], dict[str, int]]:
@@ -128,21 +156,28 @@ def assess_elements(
     element_masks: dict[str, np.ndarray],
     damage: np.ndarray,
     intact_max_overlap: float,
+    cut_margin_px: int = 0,
+    cut_min_contact: float = 1.01,
 ) -> dict[str, int]:
-    """Write damage_status / damage_overlap / damage_box_overlap into each element (in place)."""
-    counts = {INTACT: 0, FRAGMENTED: 0, "rejected_skipped": 0}
+    """Write damage_status / damage_reason / damage_overlap / damage_contact / damage_box_overlap into
+    each element (in place). The defaults switch the cut test off."""
+    counts = {INTACT: 0, FRAGMENTED: 0, "fragmented_by_cut": 0, "rejected_skipped": 0}
     for element in elements:
         if element.get("rejected"):
-            for key in ("damage_status", "damage_overlap", "damage_box_overlap"):
+            for key in ("damage_status", "damage_reason", "damage_overlap", "damage_contact", "damage_box_overlap"):
                 element.pop(key, None)
             counts["rejected_skipped"] += 1
             continue
         overlap = overlap_share(element_masks[element["id"]], damage)
         box_overlap = overlap_share(box_mask(element["box"], damage.shape), damage)
-        element["damage_status"] = label(overlap, intact_max_overlap)
+        contact = edge_contact(element_masks[element["id"]], damage, cut_margin_px)
+        element["damage_status"], element["damage_reason"] = label(overlap, intact_max_overlap, contact,
+                                                                   cut_min_contact, box_overlap)
         element["damage_overlap"] = round(overlap, 4)
+        element["damage_contact"] = round(contact, 4)
         element["damage_box_overlap"] = round(box_overlap, 4)
         counts[element["damage_status"]] += 1
+        counts["fragmented_by_cut"] += element["damage_reason"] == "cut"
     return counts
 
 
@@ -235,7 +270,8 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         if not element_masks[element["id"]].any():
             raise ContractError(f"{path}: mask of element {element['id']} is empty")
 
-    counts = assess_elements(elements, element_masks, damage, intact_max_overlap)
+    counts = assess_elements(elements, element_masks, damage, intact_max_overlap,
+                             int(dcfg["cut_margin_px"]), float(dcfg["cut_min_contact"]))
     regions, region_masks, ignored = split_regions(damage, int(dcfg["min_region_px"]))
     region_contents(regions, region_masks, elements, element_masks)
 
@@ -263,6 +299,8 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         "damage_mask": {"file": MASK_COPY, "sha256": sha256_file(run.path(MASK_COPY))},
         "settings": {
             "intact_max_overlap": intact_max_overlap,
+            "cut_margin_px": int(dcfg["cut_margin_px"]),
+            "cut_min_contact": float(dcfg["cut_min_contact"]),
             "min_mask_fraction": float(dcfg["min_mask_fraction"]),
             "min_region_px": int(dcfg["min_region_px"]),
         },
@@ -279,8 +317,8 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
 
     log.info("[damage] mask covers %.1f %% of the image; %d region(s), %d small one(s) ignored",
              fraction * 100, len(regions), ignored["count"])
-    log.info("[damage] elements: %d intact, %d fragmented (%d rejected skipped)",
-             counts[INTACT], counts[FRAGMENTED], counts["rejected_skipped"])
+    log.info("[damage] elements: %d intact, %d fragmented (%d of them by the cut test; %d rejected skipped)",
+             counts[INTACT], counts[FRAGMENTED], counts["fragmented_by_cut"], counts["rejected_skipped"])
     if "box" in mask_kinds:
         log.warning("[damage] some element masks are boxes (editor import); overlap is overstated for them")
     if agreement["compared"]:

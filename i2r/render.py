@@ -47,10 +47,10 @@ FONT = cv2.FONT_HERSHEY_SIMPLEX
 # Marking (pure)
 # ---------------------------------------------------------------------------
 
-def hatch_pattern(shape: tuple[int, int], spacing: int, offset: int = 0) -> np.ndarray:
+def hatch_pattern(shape: tuple[int, int], spacing: int, offset: int = 0, width: int = 1) -> np.ndarray:
     h, w = shape
     yy, xx = np.mgrid[0:h, 0:w]
-    return ((xx + yy + offset) % max(2, spacing)) == 0
+    return ((xx + yy + offset) % max(2, spacing)) < max(1, width)
 
 
 def inner_outline(region: np.ndarray, px: int) -> np.ndarray:
@@ -104,7 +104,9 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
     open_b &= damage_b & ~changed
     open_c = damage_b & ~changed & ~open_b
     spacing = int(rcfg["hatch_spacing_px"])
-    layer[open_b & hatch_pattern(damage.shape, spacing)] = rcfg["hatch_color_b"]
+    # tier B: opposite diagonal, two pixels wide, so it reads over dark interiors and differs from C
+    b_lines = hatch_pattern(damage.shape[::-1], spacing, width=2).T[:, ::-1]
+    layer[open_b & b_lines] = rcfg["hatch_color_b"]
     layer[open_c & hatch_pattern(damage.shape, spacing, offset=spacing // 2)] = rcfg["hatch_color"]
 
     layer = np.clip(layer, 0, 255).astype(np.uint8)

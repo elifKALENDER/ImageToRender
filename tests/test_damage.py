@@ -82,7 +82,8 @@ class DamageStepTest(unittest.TestCase):
         self.assertEqual(elements["arch_02"]["damage_overlap"], 0.0)
 
         regions = read_json(syn.run.path("damage_regions.json"))
-        self.assertEqual(regions["summary"]["elements"], {"intact": 1, "fragmented": 1, "rejected_skipped": 0})
+        self.assertEqual(regions["summary"]["elements"], {"intact": 1, "fragmented": 1, "fragmented_by_cut": 0,
+                                                       "rejected_skipped": 0})
         self.assertEqual(len(regions["regions"]), 1)
         region = regions["regions"][0]
         self.assertEqual(region["box"], [10, 10, 25, 60])
@@ -93,7 +94,8 @@ class DamageStepTest(unittest.TestCase):
         self.assertIn("damage", syn.run.meta["steps"])
 
     def test_threshold_boundary(self) -> None:
-        # 1 column of 30 = 3.3 % overlap, below intact_max_overlap 0.05 -> intact.
+        # 1 column of 30 = 3.3 % overlap, below intact_max_overlap 0.05 -> intact. The strip runs along
+        # the whole left edge (high contact) but the box overlap is also 3.3 %: bordering, not cut.
         syn = SyntheticRun(self.tmp, rect([10, 10, 11, 60]) | rect([0, 70, 30, 80]))
         damage.run_step(syn.run, None)
         self.assertEqual(syn.elements()["arch_01"]["damage_status"], "intact")
@@ -101,6 +103,17 @@ class DamageStepTest(unittest.TestCase):
         # the 50-pixel strip is below min_region_px (64): ignored as a region, still counted in overlap
         self.assertEqual(len(regions["regions"]), 1)
         self.assertEqual(regions["summary"]["ignored_small_regions"], {"count": 1, "pixels": 50})
+
+    def test_visible_part_mask_cut_by_damage_is_fragmented(self) -> None:
+        # arch_01's mask covers only its surviving top half (as SAM would); the damage takes the bottom
+        # half of its box: mask overlap 0, but the element is cut.
+        syn = SyntheticRun(self.tmp, rect([10, 35, 40, 60]))
+        save_mask(syn.run.path("element_masks/arch_01.png"), rect([10, 10, 40, 35]))
+        damage.run_step(syn.run, None)
+        element = syn.elements()["arch_01"]
+        self.assertEqual(element["damage_overlap"], 0.0)
+        self.assertEqual((element["damage_status"], element["damage_reason"]), ("fragmented", "cut"))
+        self.assertGreater(element["damage_box_overlap"], 0.4)
 
     def test_rejected_elements_get_no_status(self) -> None:
         extra = [{"id": "arch_03", "class": "arch", "box": [10, 10, 40, 60], "score": 0.1,

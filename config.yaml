@@ -76,9 +76,21 @@ editor:
   # data/structures/<id>/structure.yaml and give the reason there.
   class_map: {}
 
+refine_masks:
+  # tools/refine_masks.py: box masks (editor imports) are replaced by a SAM mask prompted with the box,
+  # clipped to the box. The SAM mask is kept only when it fills at least this share of the box;
+  # otherwise the box stays and the reason is logged.
+  min_fill: 0.20                    # initial guess
+  kinds: [box]                      # mask_kind values to refine
+
 damage:
-  # An element is "intact" when the share of its mask inside the damage mask is below this.
+  # An element is "intact" when the share of its mask inside the damage mask is below this ...
   intact_max_overlap: 0.05          # initial guess, calibrate in T20 (§5.1)
+  # ... and it is not "cut" by the damage mask (§5.1): at least this share of the mask's edge pixels
+  # lie within cut_margin_px of a damage pixel. Needed for masks that cover only the visible part of an
+  # element (SAM), whose overlap with the damage stays small even when half the element is gone.
+  cut_margin_px: 2
+  cut_min_contact: 0.10             # initial guess, calibrate in T20
   # A damage mask covering less than this share of the image is treated as empty (error).
   min_mask_fraction: 0.001
   # Connected damage regions smaller than this many pixels are ignored.
@@ -162,7 +174,7 @@ restoration:
   outline_color: [255, 255, 255]
   hatch_spacing_px: 8
   hatch_color: [220, 60, 60]        # tier C: no evidence
-  hatch_color_b: [70, 130, 230]     # tier B when not restored: position implied
+  hatch_color_b: [90, 180, 255]     # tier B when not restored: position implied (light blue, reads on dark)
   label: "AI proposal, not a restoration decision"
 
 first_construction:

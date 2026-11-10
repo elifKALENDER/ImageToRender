@@ -319,6 +319,27 @@ Assert at the end that no pixel outside the damage mask changed, and fail the ru
 building a restoration image is written and the count of completed targets equals the count of tier A
 records. No torch import is needed for this path.
 
+### T16b. SAM masks for editor boxes, the cut test, visible tier B hatch (added after T17)
+*Status: done. Why: in the T17 image every completed patch carried the wall around its element and ended
+in straight edges, because the 23 inventory elements have box masks (T12); the T19 synthetic test would
+have measured that artefact. What: (a) `tools/refine_masks.py --run <run>` prompts SAM (the detect
+step's code) with each box, clips to the box and keeps the mask if it fills at least
+`refine_masks.min_fill` (0.20) of it; it writes a new run holding only the files before the damage step.
+(b) The damage step now applies the whole §5.1 definition, "overlapping the damage mask, or cut by it":
+an element is also fragmented when at least `damage.cut_min_contact` (0.10) of its mask's edge lies
+within `cut_margin_px` (2) of damage **and** its box reaches into the damage by `intact_max_overlap`.
+Without the cut test, a SAM mask covering only the surviving half of an arch would make it intact;
+contact alone would flag intact elements that merely border a loosely drawn mask (tested both ways).
+(c) Tier B hatch: opposite diagonal, 2 px, light blue.
+Result on s01 (n = 1; SAM run `outputs/s01_test_church/20261110_181425`, pipeline run
+`20261110_181452`): SAM masks kept for 23 of 23 elements; tiers unchanged (6 A, 2 B, 13 C); 21 of 23
+labels still agree with the expert. Pixels changed fall from 9,793 to 3,397: only element pixels are
+transferred now, the arch heads arrive as curved rings, and the straight edges are gone. The two
+disagreements remain and are now explained by the drawn damage mask, not the boxes: 9.8 % of
+`pilaster_011`'s own pixels lie in the mask; `pilaster_010` overlaps 3.3 % but is cut (edge contact
+0.13, box overlap 0.07). Whether `pilaster_010` is cut is for the author; as intact it would become a
+donor for the three pilasters left in tier C. **Use run `20261110_181452` (or later) from now on.***
+
 ### T17. `i2r/render.py`
 *Status: done. Deviations, both deliberate: the source map is written per view
 (`restoration_source_map.png`, later `first_construction_source_map.png`), and the label and legend go
