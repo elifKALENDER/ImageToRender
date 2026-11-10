@@ -40,6 +40,12 @@ python -c "import torch; import xformers; import cv2; import numpy; print(torch.
 True
 ```
 
+### 5. Tam kontrol (repo kökünden)
+```
+python tools/check_env.py
+```
+Tüm sabit sürümleri ve CUDA'yı denetler; yanlış ortamdaysan hata koduyla çıkar.
+
 ---
 
 ## ÖNEMLİ NOTLAR
