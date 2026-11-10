@@ -141,6 +141,9 @@ file; elements are under `elements`, with `class`, `bbox_xyxy`, `status`). Write
 improve the numbers during this task.
 
 ### T11. `i2r/review.py`
+*Note added after T10:* detector scores on s01 are all below 0.06, so with the initial threshold every
+element is reviewed (48 on s01). The prompt therefore works on batches of numbers (reject several,
+reclassify a whole class) rather than one question per element; the per-element outcome is the same.
 **What.** Draw a numbered overlay of all elements. For each element with `score` below
 `review.confidence_threshold`, ask in the terminal: confirm, change class (choose from the list), or
 reject. Write decisions back to `elements.json` (`confirmed`, corrected `class`, `rejected`) and append
@@ -159,6 +162,18 @@ the files the editor expects; `import` turns the editor's locked inventory back 
 **Accept.** A round trip (export then import, with no edits) returns the same elements. Importing
 `outputs/restore_20260731_162315/expert_validated_inventory.json` (or the file name found there) yields
 23 elements.
+
+### T12b. Detector clean-up, measured against RND-001 (added after T10)
+**Why.** RND-001 found that five of eight pilasters are detected but labelled `column`, and that four
+boxes each cover more than 15 % of the image and are always wrong.
+**What.** (a) Add `detect.max_element_area_ratio` to `config.yaml` and drop elements whose box exceeds
+it. (b) Add `detect.class_merge` (a mapping such as `column: pilaster`) applied after NMS, off by
+default; decide per structure in `config.yaml` whether to enable it, and record the reason. Re-run the
+T10 command. Change nothing else.
+**Files.** `i2r/detect.py`, `config.yaml`, `tests/test_detect_schema.py`, append a "Re-measurement"
+section to `docs/rnd/RND-001-detection-baseline.md`.
+**Accept.** The re-measurement table sits next to the baseline in RND-001 with both commits named.
+Neither change lowers class-agnostic recall.
 
 ### T13. `tools/mask_editor.py` and `i2r/damage.py`
 **What.** (a) Copy `create_mask_with_editor()` and its helpers from `archive/inpaint/inpaint_v3.py` into a
@@ -180,7 +195,9 @@ donor and two alternatives when the best is at or above `evidence.min_similarity
 record the target with `tier: "C"` and the reason. Structure the scoring as a list of functions (§9).
 **Files.** `i2r/evidence.py`, `tests/test_evidence_a.py` (uses fixed fake embeddings; no GPU).
 **Accept.** On the test building, with the 23-element inventory imported (T12), every fragmented element
-gets a record. The test confirms ranking order, the size filter and the threshold behaviour.
+gets a record. Use the imported inventory, not raw detector output, as the input for developing T14 to
+T18: RND-001 shows the detector finds 1 of 11 fragmented elements, so detector output alone would leave
+almost nothing to complete. The test confirms ranking order, the size filter and the threshold behaviour.
 
 ### T15. `i2r/evidence.py`, tier B and tier C
 **What.** B1: group same-class intact elements into rows; find gaps between neighbours whose width is

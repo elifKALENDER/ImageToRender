@@ -57,7 +57,9 @@ detect:
 
 review:
   # Elements with a detector score below this are shown to the expert for confirmation.
+  # On s01 every detector score is below 0.06 (RND-001), so 0.15 means every element is reviewed.
   confidence_threshold: 0.15        # initial guess, calibrate in T20
+  open_overlay: true                # open review_overlay.png in the default image viewer
 
 damage:
   # An element is "intact" when the share of its mask inside the damage mask is below this.
