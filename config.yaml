@@ -1,0 +1,110 @@
+# ImageToRender — the single settings file.
+#
+# Every threshold used by the pipeline lives here; modules must not hard-code them.
+# Values marked "initial guess, calibrate in T20" are not validated yet and must not be
+# reported as tuned before the synthetic damage test (docs/ARCHITECTURE.md §7) has run.
+# Each run copies this file into its run folder, so results stay reproducible.
+
+paths:
+  data_root: data/structures       # one folder per building: image.png, damage_mask.png, SOURCE.md
+  output_root: outputs             # runs go to outputs/<structure_id>/<timestamp>/
+  image_file: image.png
+  damage_mask_file: damage_mask.png
+
+# Architectural element classes (docs/ARCHITECTURE.md §1).
+# `prompts` are the OWL-ViT text queries. Short, common English words work better than long
+# technical phrases. Prompts for arch, pilaster, column, window, door, cornice and base are taken
+# from the archived Stage 1; the others are new and untested.
+classes:
+  window:      {prompts: [window, window opening]}
+  door:        {prompts: [door, doorway]}
+  arch:        {prompts: [arch, stone arch, arched opening, arcade]}
+  pilaster:    {prompts: [pilaster, wall pillar, rectangular column]}
+  column:      {prompts: [column, stone column]}
+  cornice:     {prompts: [cornice, wall molding, moulding]}
+  eave:        {prompts: [eave, roof edge]}
+  jamb:        {prompts: [door frame, window frame]}
+  console:     {prompts: [corbel, bracket, console]}
+  parapet:     {prompts: [parapet]}
+  roof:        {prompts: [roof, dome, conical roof]}
+  base:        {prompts: [column base, plinth]}
+
+detect:
+  owlvit_model_id: google/owlvit-base-patch32
+  sam_model_id: facebook/sam-vit-base
+  use_fp16_if_cuda: true
+  # Multi-scale views (values from the archived Stage 1).
+  use_full_image_view: true
+  use_damage_context_view: true
+  damage_context_expand: 2.40
+  tile_fraction_of_short_side: 0.68
+  tile_overlap: 0.38
+  max_detection_views: 10
+  # Per prompt: keep boxes with score >= max(absolute_score_floor, best_score * relative_score_ratio).
+  absolute_score_floor: 0.008
+  relative_score_ratio: 0.58
+  max_candidates_per_prompt_per_view: 3
+  nms_iou_threshold: 0.42
+  max_detections_per_class: 10
+  max_total_detections: 48
+  min_box_area_ratio: 0.0010
+  max_box_area_ratio: 0.82
+  sam_batch_size: 6
+
+review:
+  # Elements with a detector score below this are shown to the expert for confirmation.
+  confidence_threshold: 0.15        # initial guess, calibrate in T20
+
+damage:
+  # An element is "intact" when the share of its mask inside the damage mask is below this.
+  intact_max_overlap: 0.05          # initial guess, calibrate in T20 (§5.1)
+  # A damage mask covering less than this share of the image is treated as empty (error).
+  min_mask_fraction: 0.001
+  # Connected damage regions smaller than this many pixels are ignored.
+  min_region_px: 64
+
+evidence:
+  dino_model_id: facebook/dinov2-small
+  # Tier A: best donor similarity (DINOv2 cosine) must reach this.
+  min_similarity: 0.60              # initial guess, calibrate in T20 (§5.2)
+  # Donor and target width and height ratios must lie within 1 +/- size_tolerance.
+  size_tolerance: 0.35              # initial guess, calibrate in T20
+  alternatives_kept: 2
+  try_flipped_donor: true
+  tier_b:
+    rows_enabled: true              # B1: gap in a row of same-class elements
+    row_tolerance: 0.15             # initial guess, calibrate in T20: centre/height agreement and spacing multiple
+    symmetry_enabled: true          # B2: mirror across the facade symmetry axis
+    symmetry_min_agreement: 0.60    # initial guess, calibrate in T20; below this B2 is switched off
+
+restoration:
+  include_tier_b: false             # Venice Charter: stop where conjecture begins (§5.3, D4)
+  tone_shift: 0.08                  # lightness change applied to completed regions, 0..1
+  outline_px: 1
+  outline_color: [255, 255, 255]
+  hatch_spacing_px: 8
+  hatch_color: [220, 60, 60]
+  label: "AI proposal, not a restoration decision"
+
+first_construction:
+  generative: false                 # tier C fill (T21); stays off unless it proves usable
+  strength: 0.55
+  steps: 30
+  guidance_scale: 6.5
+  context_min_px: 512
+  seed: 42
+  prompt: >-
+    historic stone masonry building, original construction state, same architectural language,
+    same stone, same light, photorealistic photograph
+  negative_prompt: >-
+    redesigned building, altered architecture, extra windows, duplicate arches, modern facade,
+    concrete, glass, fantasy architecture, changed viewpoint, warped columns, melted masonry,
+    low quality, blurry, cartoon, painting, text, watermark
+
+models:
+  inpaint_base: SG161222/Realistic_Vision_V6.0_B1_noVAE
+  vae: stabilityai/sd-vae-ft-mse
+  depth_controlnet: lllyasviel/control_v11f1p_sd15_depth
+  lineart_controlnet: lllyasviel/control_v11p_sd15_lineart
+  depth_estimator: Intel/dpt-hybrid-midas
+  annotator_repo: lllyasviel/Annotators
