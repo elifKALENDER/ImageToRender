@@ -14,7 +14,8 @@ fotoğraflarından yapısal analiz ve geometrik rekonstrüksiyon yapan aşamalı
 
 ## Kurulum
 
-Ayrıntılar ve sürüm kilitleri için [`setup/SETUP.md`](setup/SETUP.md).
+Çalışan ortamın tam yedeği repo dışında tutulur; aşağıdaki adımlar sıfırdan kurulum için
+referanstır. Ayrıntılar ve sürüm kilitleri: [`setup/SETUP.md`](setup/SETUP.md).
 
 ```bash
 cd setup

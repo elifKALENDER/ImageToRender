@@ -1,5 +1,10 @@
 # ImageToRender Kurulum Rehberi
 
+> **Birincil ortam kaynağı:** Çalışan ortamın tam yedeği (conda env export/pack) repo dışında,
+> ayrı bir yedek konumunda tutulur ve her kararlı sürümden sonra güncellenir. Aşağıdaki
+> dosyalar ise yedeğe erişilemediğinde sıfırdan kurulum için **yedek/referans** niteliğindedir
+> ve sürüm kilitlerini belgeler. İkisi çelişirse çalışan yedek esas alınır.
+
 ## Dosyalar
 - `environment.yml` → conda env + python sürümü
 - `torch_install.txt` → torch + torchvision + xformers (doğru index ile)
