@@ -1,0 +1,38 @@
+# Paths Claude should not read by default: large, binary, generated or unrelated.
+# Advisory only: Claude Code does not enforce this file. It states intent for the assistant; read a
+# listed path explicitly when a task needs it (e.g. an old run named in docs/EXPERIMENTS.md).
+#
+# Deliberately NOT listed:
+#   archive/                      tasks copy functions from it into i2r/ and tools/
+#   outputs/<structure>/          current runs; their JSON and PNG overlays are checked after each step
+#   *.png / *.jpg                 overlays and test images are inspected visually
+
+# Version control and IDE
+.git/
+.idea/
+__pycache__/
+
+# Old experiment runs (inventory in docs/EXPERIMENTS.md and archive/README.md)
+outputs/restore_*/
+outputs/run_*/
+outputs/i2r_bakim_evi_*/
+
+# Screenshots and loose assets (untracked)
+assets/
+
+# Model weights and caches
+models/
+loras/
+*.ckpt
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# Large binary data and archives
+*.npy
+*.npz
+*.zip
+
+# Logs (each run's run.log is read only when debugging)
+*.log
