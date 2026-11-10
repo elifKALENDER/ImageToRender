@@ -77,7 +77,13 @@ tb_logs/
 # ===============================
 # Data / datasets
 # ===============================
-data/
+data/**
+!data/
+!data/README.md
+!data/structures/
+!data/structures/*/
+!data/structures/*/SOURCE.md
+!data/structures/*/symmetry_axis.json
 datasets/
 mnist_data/
 
@@ -87,7 +93,6 @@ mnist_data/
 *.zip
 *.7z
 *.tar.gz
-archive/
 assets/
 old_codes.txt
 setup/_old_*
