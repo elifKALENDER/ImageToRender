@@ -259,6 +259,26 @@ T18: RND-001 shows the detector finds 1 of 11 fragmented elements, so detector o
 almost nothing to complete. The test confirms ranking order, the size filter and the threshold behaviour.
 
 ### T15. `i2r/evidence.py`, tier B and tier C
+*Status: done. Rules are a table (`TIER_B_RULES`: B1 rows, B2 symmetry), each a function returning
+targets and diagnostics. Decisions: rows are built from all observed same-class elements (intact and
+fragmented, so a fragmented element blocks its slot and stays tier A's job); spacing is the median of
+the centre distances close to the smallest one, so a row needs `min_row_size` (3) elements; B1 only
+interpolates between neighbours; the B2 axis comes from `evidence.tier_b.symmetry_axis_x` (set it in
+`structure.yaml`) or is estimated from midpoints of similar same-class pairs, scored by the share of
+checkable elements whose mirror matches one (IoU `mirror_match_iou`); when B1 and B2 imply the same
+slot one target is kept with `also_implied_by`. Tier C regions are the damage pixels outside every A and
+B target box (masks in `evidence_c_regions/`); every C record has confidence 0, A uses the similarity,
+B uses regularity or agreement times the donor's score. New settings in `evidence.tier_b`, all initial
+guesses for T20. The acceptance layouts are in `tests/test_evidence_b.py`.
+Result on s01 (run `outputs/s01_test_church/20261110_174241`, n = 1): 21 targets: 6 A, 2 B, 13 C (7
+fragmented elements without a donor and 6 uncovered regions); tier C regions hold 81 % of the damage
+pixels. B1 found one usable pilaster row (`recovered_pilaster_008`, `_022`, `pilaster_011`, `_010`,
+regularity 0.73) and implies two slots in the central collapse, x 343-366 and 400-423. Doubtful: the
+paired pilasters of this arcade are not evenly spaced, and the first slot lies 19 px right of the
+fragmented `recovered_pilaster_046`, which joined no row because its box is half the height; it may be
+the same pilaster. B2 estimated an axis at x = 355 (agreement 0.65 over 20 elements, just above 0.60)
+and implied nothing. On a curved apse photographed obliquely, an image-space mirror axis is a weak
+assumption (§10). The restoration view excludes tier B by default, so neither affects it.*
 **What.** B1: group same-class intact elements into rows; find gaps between neighbours whose width is
 near a whole multiple of the row spacing and whose implied slot lies in the damage mask with no element;
 create a target with the nearest row member as donor. B2: read a symmetry axis from the structure folder

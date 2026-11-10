@@ -128,6 +128,19 @@ evidence:
     row_tolerance: 0.15             # initial guess, calibrate in T20: centre/height agreement and spacing multiple
     symmetry_enabled: true          # B2: mirror across the facade symmetry axis
     symmetry_min_agreement: 0.60    # initial guess, calibrate in T20; below this B2 is switched off
+    # B1 needs at least this many observed elements in a row to estimate its spacing.
+    min_row_size: 3
+    # An implied slot must lie at least this much inside the damage mask ...
+    slot_min_damage: 0.50           # initial guess, calibrate in T20
+    # ... and no same-class element may cover more than this share of it.
+    slot_free_max_overlap: 0.30     # initial guess, calibrate in T20
+    # B2: a mirrored element "matches" when its IoU with a same-class element reaches this.
+    mirror_match_iou: 0.30          # initial guess, calibrate in T20
+    # B2: an axis is scored only when at least this many elements can be checked against it.
+    symmetry_min_elements: 4
+    # B2: vertical axis x in image pixels, given by the author; null = estimate from the elements.
+    # Set it per building in data/structures/<id>/structure.yaml.
+    symmetry_axis_x: null
 
 restoration:
   include_tier_b: false             # Venice Charter: stop where conjecture begins (§5.3, D4)
