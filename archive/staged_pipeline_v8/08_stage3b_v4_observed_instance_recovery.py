@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 ImageToRender2Restoration_v8_stage3b_v4_observed_instance_recovery.py
 =====================================================================
