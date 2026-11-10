@@ -73,6 +73,10 @@ class CreateRunTest(unittest.TestCase):
     def test_run_py_logs_all_six_steps(self) -> None:
         import run as entry
 
+        # Use the stub for every step: this test checks the step sequence, not the steps.
+        saved = dict(entry.STEP_MODULES)
+        entry.STEP_MODULES.clear()
+        self.addCleanup(entry.STEP_MODULES.update, saved)
         rc = entry.main(["--structure", "demo", "--no-review", "--config", str(self.config_path)])
         self.assertEqual(rc, 0)
         run_dir = next((self.tmp / "out" / "demo").iterdir())

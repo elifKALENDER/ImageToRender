@@ -43,12 +43,16 @@ detect:
   # Per prompt: keep boxes with score >= max(absolute_score_floor, best_score * relative_score_ratio).
   absolute_score_floor: 0.008
   relative_score_ratio: 0.58
+  # If no box passes for a prompt, keep its single best box as "fallback" when at least this score.
+  fallback_score_floor: 0.0035
   max_candidates_per_prompt_per_view: 3
+  max_candidates_per_class_before_nms: 24
   nms_iou_threshold: 0.42
   max_detections_per_class: 10
   max_total_detections: 48
-  min_box_area_ratio: 0.0010
+  min_box_area_ratio: 0.0010        # box area / view area
   max_box_area_ratio: 0.82
+  min_mask_area_ratio: 0.0001       # SAM mask area / image area; smaller elements are dropped
   sam_batch_size: 6
 
 review:

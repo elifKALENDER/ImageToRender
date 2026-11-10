@@ -12,6 +12,7 @@ See docs/ARCHITECTURE.md for what each step does.
 from __future__ import annotations
 
 import argparse
+import importlib
 import sys
 import time
 import traceback
@@ -22,8 +23,14 @@ from i2r import runio
 from i2r.runio import STEPS, VIEWS, ContractError, Run
 
 
-# Each step takes the run and the parsed options. Steps are filled in by tasks T09 to T21;
-# until a step is implemented it only logs its name.
+# Each step is a module in i2r/ exposing run_step(run, opts). Modules are imported only when the
+# step runs, so a later step never pays for loading an earlier step's models. Steps not yet
+# implemented (tasks T11 to T21) only log their name.
+STEP_MODULES: dict[str, str] = {
+    "detect": "i2r.detect",
+}
+
+
 def _stub(name: str) -> Callable[[Run, argparse.Namespace], None]:
     def step(run: Run, opts: argparse.Namespace) -> None:
         run.logger.info("[%s] not implemented yet", name)
@@ -32,9 +39,10 @@ def _stub(name: str) -> Callable[[Run, argparse.Namespace], None]:
     return step
 
 
-STEP_FUNCTIONS: dict[str, Callable[[Run, argparse.Namespace], None]] = {
-    name: _stub(name) for name in STEPS
-}
+def step_function(name: str) -> Callable[[Run, argparse.Namespace], None]:
+    if name in STEP_MODULES:
+        return importlib.import_module(STEP_MODULES[name]).run_step
+    return _stub(name)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -92,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         for name in STEPS[start_index:]:
             t0 = time.perf_counter()
             log.info("--- step: %s", name)
-            STEP_FUNCTIONS[name](run, opts)
+            step_function(name)(run, opts)
             run.meta["steps"][name] = {"status": "done", "seconds": round(time.perf_counter() - t0, 2)}
             runio.save_meta(run)
     except ContractError as exc:
