@@ -13,6 +13,12 @@ folder exists whose metadata or log reports completion.
 recognise architectural elements, complete missing and damaged regions from the building's own intact
 parts, and produce two views (restoration view, first-construction view) with a provenance record.
 
+**Script-version check (added in T06).** Run metadata records the SHA-256 of the producing script.
+Checked against the archived files: Stage 3A, 3B-v3, 3B-v4, 3C-A, 3C-B, 3C-C, 4, Stage 1C, inpaint v3,
+inpaint v6 and the inventory editor are confirmed. For Stage 1, 2D, 2F and the first 3B families
+version, the cited run was produced by a *different* version of the script. Details:
+`archive/README.md`.
+
 **Fate values.** *Port* = its logic moves into the new structure (`docs/ARCHITECTURE.md` §3).
 *Archive* = moved to `archive/` unchanged, kept as a record. *Delete* = removed from the working tree
 (git history keeps it).
