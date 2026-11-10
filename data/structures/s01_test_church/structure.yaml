@@ -5,3 +5,11 @@ detect:
   # detection on this building is treated as a pilaster.
   class_merge:
     column: pilaster
+
+editor:
+  # The locked expert inventory (outputs/restore_20260731_162315) has two "opening" records: the slit
+  # window in the drum (expert_opening_018) and the narrow round-headed opening beside the lower-left
+  # pilaster (expert_opening_019). Neither is a doorway, so both become "window". Reading of the
+  # photograph by the assistant during T12; the author may correct it.
+  class_map:
+    opening: window

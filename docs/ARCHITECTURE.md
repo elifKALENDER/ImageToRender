@@ -100,6 +100,7 @@ ImageToRender/
 ├── tools/
 │   ├── mask_editor.py         # draw damage_mask.png
 │   ├── inventory_editor.py    # existing Tkinter editor, unchanged, for adding missed elements
+│   ├── editor_adapter.py      # elements.json <-> editor files (export, edit, import)
 │   ├── check_env.py
 │   └── synthetic_damage.py
 ├── evaluation/

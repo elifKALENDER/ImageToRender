@@ -70,6 +70,12 @@ review:
   confidence_threshold: 0.15        # initial guess, calibrate in T20
   open_overlay: true                # open review_overlay.png in the default image viewer
 
+editor:
+  # tools/editor_adapter.py: editor classes that are not in `classes` above, mapped to one that is.
+  # Only needed for inventories saved by the old editor (e.g. its "opening"). Set per building in
+  # data/structures/<id>/structure.yaml and give the reason there.
+  class_map: {}
+
 damage:
   # An element is "intact" when the share of its mask inside the damage mask is below this.
   intact_max_overlap: 0.05          # initial guess, calibrate in T20 (§5.1)

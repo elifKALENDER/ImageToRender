@@ -25,7 +25,7 @@ Taken from `ImageToRender_WORKFLOW_20260824.zip`; every file matches that zip's 
 | `06_stage3b_v2_perspective_families.py` | Perspective-normalised arch families | Unknown (run records no script hash) | `restore_20260726_133637` or `_133608` |
 | `07_stage3b_v3_family_cleanup.py` | Family cleanup, reliable prototypes | Yes | `restore_20260726_135122` ✓ |
 | `08_stage3b_v4_observed_instance_recovery.py` | Finds visible instances the detector missed | Yes | `restore_20260731_134812` ✓ |
-| `09_stage3b_v5b_expert_inventory_editor.py` | Inventory editor, v5b (deletes boxes outright). The v5 editor in `tools/inventory_editor.py` was kept instead | Not used for the locked inventory | — |
+| `09_stage3b_v5b_expert_inventory_editor.py` | Inventory editor, v5b. The v5 editor in `tools/inventory_editor.py` was kept instead because it produced the locked inventory (same SHA-256). Both delete a box outright with Delete; rejecting is done by setting its status to `rejected`. `tools/editor_adapter.py` keeps deleted boxes in `elements.json` as rejected | Not used for the locked inventory | — |
 | `10_stage3c_a_architectural_relations.py` | Relations between inventory elements | Yes | `restore_20260731_164727` ✓ |
 | `11_stage3c_b_facade_sectors_and_bays.py` | Sectors, support and bay sequence, roles | Yes | `restore_20260731_172741` ✓ |
 | `12_stage3c_c_reconstruction_hypotheses_expert_editor.py` | Rule-based hypotheses + approval editor | Yes: 10 hypotheses, all approved | `restore_20260804_141005` ✓ |

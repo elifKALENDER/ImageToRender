@@ -154,6 +154,21 @@ every decision to `review_log.json`. With `--no-review` nothing is asked and eve
 in the file with `rejected: true`, not deleted.
 
 ### T12. Adapter for the inventory editor
+*Status: done. Commands: `edit` (export, open the editor, import), `export`, `import --run` (merge an
+editor save into a run's `elements.json`) and `import --structure` (an old inventory becomes a new
+run). Decisions: the editor is launched with the pipeline's class list (an editor `Config` argument,
+so the editor file is unchanged); old editor classes go through `editor.class_map` (s01: `opening` to
+`window`, reason in its `structure.yaml`); boxes the editor deleted or merged stay in `elements.json`
+as rejected, because the editor's Delete removes a box outright; the editor's preset status is not
+taken as an expert judgement, so `expert_condition` is written only for records the expert touched.
+Result: the round trip on the 48-element s01 run returns an identical file; the locked inventory
+imports as run `outputs/s01_test_church/20261110_171025` with 23 elements (12 intact, 11 fragmented,
+8 expert-added), and the T10 command scores it 23/23 at IoU 1.00 against the original.
+**For T13 to T15:** use that run (`python run.py --structure s01_test_church --from damage` while it is
+the latest). Its masks are rectangles (`mask_kind: "box"`), so mask overlap in T13 overstates an
+element's area; refining box masks with SAM is an open option, not done. The expert's own condition
+label is in `expert_condition` and the donor flag in `editor_record.usable_as_prototype`; compare
+both with what T13 and T15 compute.*
 **What.** `tools/inventory_editor.py` reads and writes the old Stage 3B formats. Read its loading and
 saving code, then write a small adapter with two commands: `export` turns a run's `elements.json` into
 the files the editor expects; `import` turns the editor's locked inventory back into `elements.json`
