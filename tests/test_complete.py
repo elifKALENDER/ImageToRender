@@ -111,6 +111,29 @@ class RuleTest(unittest.TestCase):
         self.assertEqual([e["target_id"] for e in report["targets"]], ["t_001", "t_002", "t_003"])
 
 
+class FirstConstructionTest(unittest.TestCase):
+    def test_rule_completes_a_and_b_not_c(self) -> None:
+        rgb, damage, mask, _ = scene()
+        records = [record("A"), record("B", "t_002"), record("C", "t_003", donor=None, confidence=0.0)]
+        _, _, report = complete.complete_view("first_construction", rgb, damage, records, {"donor": mask}, config())
+        status = {e["tier"]: e["status"] for e in report["targets"]}
+        self.assertEqual(status, {"A": "completed", "B": "completed", "C": "not_completed"})
+        self.assertIn("generative fill off", report["targets"][2]["rule_reason"])
+
+    def test_views_differ_only_inside_tier_b_targets(self) -> None:
+        rgb, damage, mask, _ = scene()
+        damage[75:88, 95:115] = 1
+        b_box = [95, 75, 115, 88]
+        records = [record("A"), record("B", "t_002", box=b_box, confidence=0.5)]
+        restoration, _, _ = complete.complete_view("restoration", rgb, damage, records, {"donor": mask}, config())
+        first, _, _ = complete.complete_view("first_construction", rgb, damage, records, {"donor": mask}, config())
+        differ = np.any(restoration != first, axis=-1)
+        self.assertTrue(differ.any())
+        inside_b = np.zeros_like(differ)
+        inside_b[75:88, 95:115] = True
+        self.assertFalse((differ & ~inside_b).any())
+
+
 class PreservationTest(unittest.TestCase):
     def test_a_change_outside_the_mask_fails_the_view(self) -> None:
         rgb, damage, donor_mask, _ = scene()

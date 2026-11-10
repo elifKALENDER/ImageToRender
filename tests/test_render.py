@@ -73,9 +73,9 @@ class RenderTest(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def render(self, include_tier_b: bool = False) -> Run:
+    def render(self, include_tier_b: bool = False, views: tuple[str, ...] = ("restoration",)) -> Run:
         run = build_run(self.tmp, include_tier_b)
-        opts = types.SimpleNamespace(views=["restoration"])
+        opts = types.SimpleNamespace(views=list(views))
         complete.run_step(run, opts)
         render.run_step(run, opts)
         return run
@@ -126,6 +126,27 @@ class RenderTest(unittest.TestCase):
         blue = tuple(run.config["restoration"]["hatch_color_b"])
         region = marked[40:80, 95:115].reshape(-1, 3)
         self.assertTrue(any(tuple(p) == blue for p in region))
+
+    def test_both_views(self) -> None:
+        run = self.render(views=("restoration", "first_construction"))
+        for name in ("first_construction.png", "first_construction_source_map.png",
+                     "first_construction_conjecture_overlay.png"):
+            self.assertTrue(run.path(name).is_file(), name)
+        prov = read_json(run.path("provenance.json"))
+        by_id = {e["target_id"]: e for e in prov["targets"]}
+        self.assertEqual(by_id["t_002"]["views"], {"restoration": "not_completed", "first_construction": "completed"})
+        self.assertEqual(by_id["t_003"]["views"], {"restoration": "not_completed",
+                                                   "first_construction": "not_completed"})
+        self.assertEqual(prov["views"]["first_construction"]["markings_px"]["generative_px"], 0)
+        # the marked images differ only inside the tier B target
+        a = np.asarray(Image.open(run.path("restoration.png")).convert("RGB"))
+        b = np.asarray(Image.open(run.path("first_construction.png")).convert("RGB"))
+        h = np.asarray(Image.open(run.image_path)).shape[0]
+        differ = np.any(a[:h] != b[:h], axis=-1)
+        inside_b = np.zeros_like(differ)
+        inside_b[40:80, 95:115] = True
+        self.assertTrue(differ.any())
+        self.assertFalse((differ & ~inside_b).any())
 
     def test_tier_b_switch_completes_and_records_it(self) -> None:
         run = self.render(include_tier_b=True)

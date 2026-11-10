@@ -373,6 +373,16 @@ pixel has a source).
 target in `evidence.json` appears in `provenance.json` with its view status.
 
 ### T18. First-construction rule, tiers A and B
+*Status: done. `rule_first_construction` completes tiers A and B by donor transfer; tier C stays open
+while `first_construction.generative` is false (and until T21 exists). Decision: additions are marked
+(tone shift, inner outline) in this view too, so every AI addition is visible in both images; as a
+result the two marked images, not only the raw composites, differ only inside tier B targets (tested on
+both). `first_construction_conjecture_overlay.png` shows generative pixels in magenta over the faded
+photograph and the open damage hatched; it has no magenta yet and says "no generative fill".
+`provenance.json` records both views per target. Result on s01 (run
+`outputs/s01_test_church/20261110_182638`, n = 1): restoration 5 targets / 4,971 px, first construction 7
+targets / 11,367 px; the views differ in 6,395 pixels, none outside the two B boxes. The two B pilasters
+stand in the central collapse; whether they existed there is the doubt recorded in T15.*
 **What.** Add the first-construction rule (§5.4) for A and B by donor transfer. Render
 `first_construction.png` with a separate `conjecture_overlay.png` (empty for now, tier C still unfilled
 and shown as such). Update `provenance.json` with the second view's status.

@@ -10,6 +10,10 @@ Per view <v> that the complete step produced:
                          the photograph in faded grey. Same bar.
 Once per run:
     provenance.json      one entry per evidence target (§5.6) with its status in every view
+    first_construction_conjecture_overlay.png
+                         (first-construction view only) generative pixels in magenta over the faded
+                         photograph, open damage hatched; empty of magenta while the generative fill is
+                         off. Delivered with first_construction.png, never apart (§5.4).
     targets_overlay.png  elements (thin, by class) and targets (by tier), with the bar
     legend.png           the bar alone
 
@@ -188,6 +192,32 @@ def bar(width: int, rcfg: dict, view: str | None, items: list | None = None) -> 
     return out[: max(y + 16, 40)]
 
 
+CONJECTURE_COLOUR = (200, 60, 200)
+CONJECTURE_LEGEND = [
+    (CONJECTURE_COLOUR, "generative fill (conjecture)"),
+    ((220, 60, 60), "hatched: open, no evidence"),
+]
+
+
+def conjecture_overlay(photo: np.ndarray, damage: np.ndarray, labels: np.ndarray, report: dict,
+                       rcfg: dict) -> tuple[np.ndarray, int]:
+    """Faded photograph; generative pixels magenta; damage left open hatched. Returns (image, generative px)."""
+    g = cv2.cvtColor(photo, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    out = np.repeat((g * 0.45 + 120)[..., None], 3, axis=2).astype(np.uint8)
+    generative = np.zeros(damage.shape, dtype=bool)
+    for e in report["targets"]:
+        if e.get("method") == "generative" and e.get("label"):
+            generative |= labels == e["label"]
+    out[generative] = CONJECTURE_COLOUR
+    open_damage = (damage > 0) & (labels == 0)
+    spacing = int(rcfg["hatch_spacing_px"])
+    out[open_damage & hatch_pattern(damage.shape, spacing)] = rcfg["hatch_color"]
+    n = int(generative.sum())
+    if n == 0:
+        put_label(out, "no generative fill", open_damage, (255, 255, 255))
+    return out, n
+
+
 def with_bar(image: np.ndarray, rcfg: dict, view: str | None, items: list | None = None) -> np.ndarray:
     return np.vstack([image, bar(image.shape[1], rcfg, view, items)])
 
@@ -282,6 +312,11 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         Image.fromarray(with_bar(source_map(photo, labels, label_targets), rcfg, view,
                                         SOURCE_MAP_LEGEND)).save(
             run.path(f"{view}_source_map.png"))
+        if view == "first_construction":
+            overlay, generative_px = conjecture_overlay(photo, damage, labels, report, rcfg)
+            Image.fromarray(with_bar(overlay, rcfg, view, CONJECTURE_LEGEND)).save(
+                run.path("first_construction_conjecture_overlay.png"))
+            counts["generative_px"] = generative_px
         rendered[view] = counts
         log.info("[render] %s: %s.png and %s_source_map.png | %s", view, view, view, counts)
 
@@ -295,7 +330,9 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         "damage_mask": {"file": DAMAGE_MASK, "sha256": sha256(run.path(DAMAGE_MASK))},
         "views": {v: {"image": f"{v}.png", "source_map": f"{v}_source_map.png",
                       "source_labels": f"{v}_source.png", "labels": completion["views"][v]["labels"],
-                      "markings_px": rendered[v]} for v in rendered},
+                      "markings_px": rendered[v],
+                      **({"conjecture_overlay": "first_construction_conjecture_overlay.png"}
+                         if v == "first_construction" else {})} for v in rendered},
         "method_values": ["donor_transfer", "generative", "none"],
         "targets": entries,
     })

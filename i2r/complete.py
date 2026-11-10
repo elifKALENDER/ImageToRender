@@ -11,7 +11,8 @@ Donor transfer (docs/ARCHITECTURE.md §5.5), deterministic, no model:
 
 View rules (§5.3, §5.4) are a table, ``VIEW_RULES``: record -> (complete?, reason). The restoration
 rule completes tier A, tier B only with ``restoration.include_tier_b``, never tier C. The
-first-construction rule is T18; asking for that view logs it as not implemented.
+first-construction rule completes tiers A and B by donor transfer; tier C is left open until the
+generative fill (T21) exists and ``first_construction.generative`` is true.
 
 At the end of every view: no pixel outside the damage mask may differ from the photograph
 (``assert_preserved``); otherwise the run fails with ``PreservationError``.
@@ -62,8 +63,20 @@ def rule_restoration(record: dict, config: dict) -> tuple[bool, str]:
     return False, "tier C: no evidence"
 
 
+def rule_first_construction(record: dict, config: dict) -> tuple[bool, str]:
+    tier = record["tier"]
+    if tier == "A":
+        return True, "tier A: direct evidence"
+    if tier == "B":
+        return True, "tier B: positional evidence"
+    if config["first_construction"]["generative"]:
+        return False, "tier C: generative fill is not implemented yet (T21)"
+    return False, "tier C: no evidence; generative fill off (first_construction.generative: false)"
+
+
 VIEW_RULES: dict[str, Callable[[dict, dict], tuple[bool, str]]] = {
     "restoration": rule_restoration,
+    "first_construction": rule_first_construction,
 }
 
 
@@ -309,7 +322,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     report: dict[str, Any] = {"structure_id": run.structure_id, "views": {}}
     for view in getattr(opts, "views", ["restoration"]):
         if view not in VIEW_RULES:
-            log.info("[complete] view %s: not implemented yet (T18)", view)
+            log.info("[complete] view %s: no rule in VIEW_RULES", view)
             report["views"][view] = {"status": "not_implemented"}
             continue
         out, labels, view_report = complete_view(view, rgb, damage, records, donor_masks, run.config)
