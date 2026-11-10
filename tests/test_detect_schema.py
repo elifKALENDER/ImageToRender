@@ -107,5 +107,47 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual([(d["class"], d["score"]) for d in kept], [("arch", 0.9), ("window", 0.7)])
 
 
+class CleanupTest(unittest.TestCase):
+    """T12b: class merge and oversized-box removal."""
+
+    def test_class_merge_relabels_and_keeps_detector_label(self) -> None:
+        dets = [{"class": "column", "score": 0.2, "box": [0, 0, 10, 10]},
+                {"class": "arch", "score": 0.1, "box": [0, 0, 10, 10]}]
+        changed = detect.apply_class_merge(dets, {"column": "pilaster"})
+        self.assertEqual(changed, 1)
+        self.assertEqual([(d["class"], d["detected_class"]) for d in dets],
+                         [("pilaster", "column"), ("arch", "arch")])
+
+    def test_merge_before_nms_removes_the_duplicate_box(self) -> None:
+        dets = [{"class": "column", "score": 0.2, "box": [0, 0, 10, 40]},
+                {"class": "pilaster", "score": 0.1, "box": [1, 0, 11, 40]}]
+        detect.apply_class_merge(dets, {"column": "pilaster"})
+        kept = detect.class_aware_nms(dets, 0.42, 10, 10)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(kept[0]["detected_class"], "column")
+
+    def test_class_merge_must_use_known_classes_and_no_chains(self) -> None:
+        classes = ["column", "pilaster", "arch"]
+        detect.check_class_merge({"column": "pilaster"}, classes)
+        with self.assertRaises(ContractError):
+            detect.check_class_merge({"column": "gargoyle"}, classes)
+        with self.assertRaises(ContractError):
+            detect.check_class_merge({"column": "pilaster", "pilaster": "arch"}, classes)
+
+    def test_oversized_boxes_are_dropped_with_per_class_override(self) -> None:
+        config = {"detect": {"max_element_area_ratio": 0.15},
+                  "classes": {"arch": {"prompts": ["arch"]},
+                              "roof": {"prompts": ["roof"], "max_area_ratio": 0.5}}}
+        dets = [{"class": "arch", "score": 0.3, "box": [0, 0, 50, 50]},    # 25 % of 100x100: dropped
+                {"class": "arch", "score": 0.2, "box": [0, 0, 30, 30]},    # 9 %: kept
+                {"class": "roof", "score": 0.1, "box": [0, 0, 50, 50]}]    # 25 % but roof allows 50 %
+        kept, dropped = detect.split_oversized(dets, 100, 100, config)
+        self.assertEqual([(d["class"], d["score"]) for d in kept], [("arch", 0.2), ("roof", 0.1)])
+        self.assertEqual(len(dropped), 1)
+
+    def test_main_config_has_no_class_merge(self) -> None:
+        self.assertEqual(load_config()["detect"]["class_merge"], {})
+
+
 if __name__ == "__main__":
     unittest.main()

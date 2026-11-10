@@ -172,7 +172,7 @@ def build_views(width: int, height: int, damage: np.ndarray | None, dcfg: dict[s
 
     damage_box = mask_bbox(damage) if damage is not None else None
     if dcfg["use_damage_context_view"] and damage_box is not None:
-        min_side = int(round(min(width, height) * 0.48))
+        min_side = int(round(min(width, height) * dcfg["damage_context_min_fraction"]))
         views.append(View(
             "damage_context",
             square_around(damage_box, width, height, dcfg["damage_context_expand"], min_side),
@@ -238,6 +238,46 @@ def select_candidates(
     return selected, diagnostics
 
 
+def check_class_merge(merge: dict[str, str], classes: Iterable[str]) -> None:
+    known = set(classes)
+    for source, target in merge.items():
+        if source not in known or target not in known:
+            raise ContractError(f"config detect.class_merge: {source!r} -> {target!r} uses an unknown class")
+        if target in merge:
+            raise ContractError(f"config detect.class_merge: {target!r} is both a target and a source")
+
+
+def apply_class_merge(detections: list[dict[str, Any]], merge: dict[str, str]) -> int:
+    """Relabel detections in place; the detector's own label is kept as ``detected_class``."""
+    changed = 0
+    for det in detections:
+        det.setdefault("detected_class", det["class"])
+        if det["class"] in merge:
+            det["class"] = merge[det["class"]]
+            changed += 1
+    return changed
+
+
+def max_area_ratio(element_class: str, config: dict[str, Any]) -> float:
+    """Largest allowed box area (share of the image) for a class."""
+    override = config["classes"].get(element_class, {}).get("max_area_ratio")
+    return float(override if override is not None else config["detect"]["max_element_area_ratio"])
+
+
+def split_oversized(
+    detections: list[dict[str, Any]], width: int, height: int, config: dict[str, Any]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Separate detections whose box covers too much of the image. Returns (kept, dropped)."""
+    kept, dropped = [], []
+    for det in detections:
+        box = clamp_box(det["box"], width, height)
+        if box_area_ratio(box, width, height) > max_area_ratio(det["class"], config):
+            dropped.append({"class": det["class"], "box": box, "score": round(float(det["score"]), 6)})
+        else:
+            kept.append(det)
+    return kept, dropped
+
+
 def class_aware_nms(
     detections: list[dict[str, Any]], iou_threshold: float, max_per_class: int, max_total: int
 ) -> list[dict[str, Any]]:
@@ -283,11 +323,13 @@ def _to_device(batch: dict[str, Any], device: str, fp16: bool) -> dict[str, Any]
 
 
 def detect_owlvit(
-    image: Image.Image, views: list[View], specs: list[PromptSpec], dcfg: dict[str, Any],
+    image: Image.Image, views: list[View], specs: list[PromptSpec], config: dict[str, Any],
     device: str, fp16: bool, log: Any,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     import torch
     from transformers import OwlViTForObjectDetection, OwlViTProcessor
+
+    dcfg = config["detect"]
 
     log.info("[detect] loading OWL-ViT %s on %s", dcfg["owlvit_model_id"], device)
     processor = OwlViTProcessor.from_pretrained(dcfg["owlvit_model_id"])
@@ -321,6 +363,18 @@ def detect_owlvit(
     del model, processor
     _free_cuda()
 
+    # Merge classes the detector cannot tell apart, then drop oversized boxes. Both happen before
+    # NMS: merging first lets NMS reduce two boxes on one element (one per original class) to one,
+    # and dropping first keeps an oversized box from suppressing a correct one or using up the
+    # per-class limit.
+    merged = apply_class_merge(found, dcfg.get("class_merge") or {})
+    if merged:
+        log.info("[detect] class merge %s applied to %d candidate(s)", dcfg["class_merge"], merged)
+    width, height = image.size
+    found, dropped_large = split_oversized(found, width, height, config)
+    if dropped_large:
+        log.info("[detect] dropped %d oversized candidate(s)", len(dropped_large))
+
     # Cap each class before NMS so overlapping tiles cannot flood one class.
     capped: list[dict[str, Any]] = []
     per_class: dict[str, list[dict[str, Any]]] = {}
@@ -331,8 +385,9 @@ def detect_owlvit(
 
     final = class_aware_nms(capped, dcfg["nms_iou_threshold"], dcfg["max_detections_per_class"],
                             dcfg["max_total_detections"])
+    diagnostics_extra = {"dropped_oversized": dropped_large, "class_merge_changed": merged}
     log.info("[detect] candidates %d, after class cap %d, after NMS %d", len(found), len(capped), len(final))
-    return final, view_diagnostics
+    return final, view_diagnostics, diagnostics_extra
 
 
 def segment_sam(
@@ -448,6 +503,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     log = run.logger
     dcfg = run.config["detect"]
     specs = prompt_specs(run.config["classes"])
+    check_class_merge(dcfg.get("class_merge") or {}, run.config["classes"])
 
     if not run.image_path.is_file():
         raise ContractError(f"Image not found: {run.image_path}")
@@ -468,7 +524,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     views = build_views(width, height, damage, dcfg)
     Image.fromarray(draw_views(rgb, views)).save(run.path("detect_views.png"))
 
-    detections, view_diagnostics = detect_owlvit(image, views, specs, dcfg, device, fp16, log)
+    detections, view_diagnostics, extra = detect_owlvit(image, views, specs, run.config, device, fp16, log)
     boxes = [clamp_box(det["box"], width, height) for det in detections]
     masks = segment_sam(image, boxes, dcfg, device, fp16, log)
     if len(masks) != len(boxes):
@@ -497,6 +553,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
             "score": round(float(det["score"]), 6),
             "mask_file": mask_file,
             "source": "detector",
+            "detected_class": det.get("detected_class", det["class"]),
             "prompt": det["prompt"],
             "view": det["view"],
             "quality": det["quality"],
@@ -515,6 +572,8 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
             "by_class": by_class,
             "classes_with_no_detection": [name for name, n in by_class.items() if n == 0],
             "dropped_small_masks": dropped_small,
+            "dropped_oversized_candidates": len(extra["dropped_oversized"]),
+            "class_merge": dcfg.get("class_merge") or {},
             "views": len(views),
             "device": device,
             "peak_vram_gb": round(peak_gb, 3),
@@ -522,7 +581,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     }
     validate_elements(doc)
     write_json(run.path(ELEMENTS_FILE), doc)
-    write_json(run.path("detect_diagnostics.json"), {"views": view_diagnostics})
+    write_json(run.path("detect_diagnostics.json"), {"views": view_diagnostics, **extra})
     Image.fromarray(draw_elements(rgb, elements, element_masks)).save(run.path("detect_elements.png"))
 
     log.info("[detect] elements: %d  %s", len(elements), {k: v for k, v in by_class.items() if v})

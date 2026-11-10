@@ -1,0 +1,7 @@
+# Settings that differ from config.yaml for this building only.
+detect:
+  # RND-001: five of eight expert-confirmed pilasters were detected with IoU 0.60-1.00 but labelled
+  # "column". The supports of this blind arcade are engaged (attached to the wall), so every "column"
+  # detection on this building is treated as a pilaster.
+  class_merge:
+    column: pilaster

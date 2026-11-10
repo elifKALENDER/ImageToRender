@@ -115,3 +115,62 @@ Other observations on s01:
 - Per-class zero-shot recall on heritage facades, over more buildings (R2 in `docs/TASKS.md`).
 - Do frozen DINOv2 or CLIP features separate pilaster from column on crops better than OWL-ViT's text
   prompts? This connects to the existing frozen-features question (R1).
+
+---
+
+## Re-measurement after detector clean-up (T12b)
+
+| | |
+|---|---|
+| Date | 2026-11-10 |
+| Baseline code | commit `57c3330` |
+| Clean-up code | the commit that adds this section (`fix(T12b)`) |
+| Run | `outputs/s01_test_church/20261110_165746` (local) |
+| Structures | **n = 1** (s01_test_church) |
+
+Two changes, nothing else:
+
+1. **Oversized boxes dropped.** `detect.max_element_area_ratio: 0.15`. On the baseline no box above
+   6.6 % of the image matched any reference element, and the largest reference element covers 2.7 %.
+   0.15 is a cautious cut that removes only the boxes spanning the whole building. A class can override
+   it (`classes.<name>.max_area_ratio`), for example for roofs.
+2. **`column` merged into `pilaster` for this building only**, in
+   `data/structures/s01_test_church/structure.yaml`. The main `config.yaml` keeps the two classes
+   apart. The merge runs before NMS, so two boxes on the same support become one.
+
+| Metric | Baseline | After clean-up |
+|---|---|---|
+| Recall (class-aware) | 30 % (7 of 23) | **52 % (12 of 23)** |
+| Recall, class ignored | 57 % | 57 % |
+| Recall at IoU 0.3 (class-aware) | 35 % | 57 % |
+| Precision on classes the reference covers | 18 % (38 judged) | 26 % (46 judged) |
+| Mean IoU of matched pairs | 0.77 | 0.76 |
+| Oversized candidates dropped | — | 9 |
+
+| Reference class | Baseline recall | After clean-up |
+|---|---|---|
+| arch | 38 % (3 of 8) | 38 % (3 of 8) |
+| base | 0 % (0 of 3) | 0 % (0 of 3) |
+| cornice | 100 % (2 of 2) | 100 % (2 of 2) |
+| opening | 50 % (1 of 2) | 50 % (1 of 2) |
+| pilaster | 12 % (1 of 8) | **75 % (6 of 8)** |
+
+### Reading the result
+
+- The whole gain comes from the class merge: pilaster recall rises from 1 to 6 of 8. Class-aware
+  recall now nearly equals class-agnostic recall (52 % against 57 %), so class confusion is no longer
+  the main loss on this building.
+- Dropping oversized boxes did not raise recall. It removed wrong boxes; the freed places under the
+  48-element limit were taken by other low-score candidates, so the element count stayed at 48 and
+  precision improved only from 18 % to 26 %.
+- **Unchanged weaknesses:** arches 3 of 8, bases 0 of 3, and fragmented elements. These are missed
+  boxes, not wrong labels, and no setting changed here addresses them. They remain work for the expert
+  editor (T12) or for a later instance-recovery step.
+
+### Caution
+
+Both changes were chosen by looking at this one building and are reported on the same building. The
+pilaster merge is an architectural judgement about s01 (engaged supports), not a general rule; it is
+deliberately not in the main configuration. On s02 (no reference) the size limit dropped the boxes
+that spanned the whole building; whether it also dropped a correct large element there was checked by
+eye only.

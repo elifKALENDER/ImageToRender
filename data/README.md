@@ -7,11 +7,12 @@ One folder per building: `data/structures/<id>/`.
 | `image.png` | Yes | The photograph, RGB. |
 | `damage_mask.png` | Yes | Single channel, same size as the image. White (255) = damaged or missing, black (0) = intact. Draw it with `tools/mask_editor.py`. |
 | `SOURCE.md` | Yes | Building, location, photographer, source URL, licence, date obtained. Write "Unknown" rather than leaving a field empty. |
+| `structure.yaml` | No | Settings that differ from `config.yaml` for this building only (same layout, only the keys that differ). State the reason in a comment. |
 | `symmetry_axis.json` | No | `{"x": <pixel column>}` if the facade has a known vertical symmetry axis. |
 
 ## What is tracked in git
 
-Only `README.md`, `SOURCE.md` and `symmetry_axis.json` are tracked by default. Images are tracked only
+Only `README.md`, `SOURCE.md`, `structure.yaml` and `symmetry_axis.json` are tracked by default. Images are tracked only
 when `SOURCE.md` states a licence that allows redistribution; add a per-structure exception to
 `.gitignore` in that case.
 

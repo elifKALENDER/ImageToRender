@@ -164,6 +164,11 @@ the files the editor expects; `import` turns the editor's locked inventory back 
 23 elements.
 
 ### T12b. Detector clean-up, measured against RND-001 (added after T10)
+*Status: done before T12 (it does not depend on T12). Two deviations from the text below, both
+deliberate: the class merge runs **before** NMS, otherwise two boxes stay on one element; and the
+per-building choice lives in `data/structures/<id>/structure.yaml`, a new optional file merged over
+`config.yaml`, because one settings file cannot hold a per-building decision. Result: class-aware
+recall 30 % to 52 % on s01; see the re-measurement section of RND-001.*
 **Why.** RND-001 found that five of eight pilasters are detected but labelled `column`, and that four
 boxes each cover more than 15 % of the image and are always wrong.
 **What.** (a) Add `detect.max_element_area_ratio` to `config.yaml` and drop elements whose box exceeds

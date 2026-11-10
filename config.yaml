@@ -3,7 +3,9 @@
 # Every threshold used by the pipeline lives here; modules must not hard-code them.
 # Values marked "initial guess, calibrate in T20" are not validated yet and must not be
 # reported as tuned before the synthetic damage test (docs/ARCHITECTURE.md §7) has run.
-# Each run copies this file into its run folder, so results stay reproducible.
+# A building can override any value in data/structures/<id>/structure.yaml (same layout, only the
+# keys that differ). Each run writes the merged, effective settings into its run folder as
+# config.yaml, so results stay reproducible.
 
 paths:
   data_root: data/structures       # one folder per building: image.png, damage_mask.png, SOURCE.md
@@ -37,6 +39,7 @@ detect:
   use_full_image_view: true
   use_damage_context_view: true
   damage_context_expand: 2.40
+  damage_context_min_fraction: 0.48   # minimum side of that view, as a share of the short image side
   tile_fraction_of_short_side: 0.68
   tile_overlap: 0.38
   max_detection_views: 10
@@ -53,6 +56,12 @@ detect:
   min_box_area_ratio: 0.0010        # box area / view area
   max_box_area_ratio: 0.82
   min_mask_area_ratio: 0.0001       # SAM mask area / image area; smaller elements are dropped
+  # Boxes covering more than this share of the image are dropped (RND-001: every such box on s01
+  # spanned the whole building and was wrong). A class can override it: classes.<name>.max_area_ratio.
+  max_element_area_ratio: 0.15      # chosen on s01 only; re-check on every new structure
+  # Classes the detector cannot tell apart are merged before NMS, e.g. {column: pilaster}.
+  # Empty here; set per building in data/structures/<id>/structure.yaml and give the reason there.
+  class_merge: {}
   sam_batch_size: 6
 
 review:

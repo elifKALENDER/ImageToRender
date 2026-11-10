@@ -62,6 +62,38 @@ def load_config(path: Path | str = DEFAULT_CONFIG) -> dict[str, Any]:
     return cfg
 
 
+STRUCTURE_CONFIG = "structure.yaml"
+
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Return ``base`` with ``override`` applied; nested mappings are merged, other values replaced."""
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def apply_structure_config(cfg: dict[str, Any], folder: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Merge the building's optional structure.yaml over the main config.
+
+    Returns (effective config, the overrides that were applied).
+    """
+    path = folder / STRUCTURE_CONFIG
+    if not path.is_file():
+        return cfg, {}
+    with path.open(encoding="utf-8") as fh:
+        override = yaml.safe_load(fh) or {}
+    if not isinstance(override, dict):
+        raise ContractError(f"{path}: expected a mapping")
+    unknown = [key for key in override if key not in cfg]
+    if unknown:
+        raise ContractError(f"{path}: unknown top-level section(s): {', '.join(unknown)}")
+    return deep_merge(cfg, override), override
+
+
 # ---------------------------------------------------------------------------
 # JSON
 # ---------------------------------------------------------------------------
@@ -147,6 +179,7 @@ def create_run(
     config_path = Path(config_path)
     cfg = load_config(config_path)
     sdir = structure_dir(cfg, structure_id)
+    cfg, overrides = apply_structure_config(cfg, sdir)
 
     runs_root = structure_runs_root(cfg, structure_id)
     runs_root.mkdir(parents=True, exist_ok=True)
@@ -169,7 +202,9 @@ def create_run(
             else:
                 shutil.copy2(item, target)
 
-    shutil.copy2(config_path, run_dir / "config.yaml")
+    # The run folder gets the effective settings (main config + structure overrides).
+    with (run_dir / "config.yaml").open("w", encoding="utf-8", newline="\n") as fh:
+        yaml.safe_dump(cfg, fh, sort_keys=False, allow_unicode=True)
     logger = setup_logger(run_dir)
 
     meta = {
@@ -178,6 +213,8 @@ def create_run(
         "started_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "status": "running",
         "resumed_from": relative(resume_from) if resume_from else None,
+        "config_file": relative(config_path),
+        "structure_overrides": overrides,
         "steps": {},
         "environment": environment_info(),
         "git_commit": git_commit(),

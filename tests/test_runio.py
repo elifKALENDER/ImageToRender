@@ -88,5 +88,44 @@ class CreateRunTest(unittest.TestCase):
         self.assertEqual(list(meta["steps"]), list(runio.STEPS))
 
 
+class StructureConfigTest(unittest.TestCase):
+    def test_deep_merge_replaces_leaves_and_keeps_siblings(self) -> None:
+        base = {"detect": {"a": 1, "class_merge": {}}, "review": {"t": 0.1}}
+        merged = runio.deep_merge(base, {"detect": {"class_merge": {"column": "pilaster"}}})
+        self.assertEqual(merged["detect"], {"a": 1, "class_merge": {"column": "pilaster"}})
+        self.assertEqual(merged["review"], {"t": 0.1})
+        self.assertEqual(base["detect"]["class_merge"], {})  # base untouched
+
+    def test_structure_yaml_is_applied_and_recorded(self) -> None:
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        cfg = runio.load_config()
+        cfg["paths"]["data_root"] = str(tmp / "data")
+        cfg["paths"]["output_root"] = str(tmp / "out")
+        folder = tmp / "data" / "demo"
+        folder.mkdir(parents=True)
+        (folder / "structure.yaml").write_text(yaml.safe_dump({"detect": {"class_merge": {"column": "pilaster"}}}), encoding="utf-8")
+        config_path = tmp / "config.yaml"
+        config_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+
+        run = runio.create_run("demo", config_path)
+        try:
+            self.assertEqual(run.config["detect"]["class_merge"], {"column": "pilaster"})
+            saved = yaml.safe_load((run.run_dir / "config.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(saved["detect"]["class_merge"], {"column": "pilaster"})
+            meta = runio.read_json(run.run_dir / "run_meta.json")
+            self.assertEqual(meta["structure_overrides"], {"detect": {"class_merge": {"column": "pilaster"}}})
+        finally:
+            runio.close_logger(run)
+
+    def test_unknown_section_in_structure_yaml_is_an_error(self) -> None:
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        (tmp / "structure.yaml").write_text(yaml.safe_dump({"detct": {"x": 1}}), encoding="utf-8")
+        with self.assertRaises(ContractError) as ctx:
+            runio.apply_structure_config(runio.load_config(), tmp)
+        self.assertIn("detct", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
