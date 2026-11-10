@@ -229,6 +229,23 @@ connected regions; write `damage_regions.json` and the status into `elements.jso
 mask covering half of one, exactly that one is labelled `fragmented`.
 
 ### T14. `i2r/evidence.py`, tier A
+*Status: done. Filters and scorers are two lists (`DONOR_FILTERS`, `SCORERS`), as §9 asks. Decisions:
+each element box is resized to 224 x 224 and the DINOv2 patch tokens are mean-pooled
+(`evidence.pooling`, `crop_px`); the donor is resized to the target box and the target's hole is hidden
+on it too (`mask_donor_like_target`), so both are compared on the part that survives; both orientations
+are scored. Added after the first s01 run: `evidence.min_visible_fraction` (0.25, initial guess),
+because `expert_opening_019`, 8 % visible, scored 0.95 against the drum slit: both crops were almost all
+fill colour. Outputs `evidence.json` (every candidate with its score, every rejected same-class donor with
+its reason), `evidence_overlay.png`, `evidence_sheet.png`. The model is downloaded on first use (88 MB).
+Result on s01 (run `outputs/s01_test_church/20261110_173541`, n = 1): all 13 fragmented elements have a
+record; 6 tier A, 7 tier C. Tier A: `recovered_arch_003` and `recovered_arch_001` from `arch_005` (the
+second flipped; `arch_007` 0.92 is a near tie with 0.94), four pilasters from `recovered_pilaster_008`,
+the only intact pilaster. Tier C: three pilasters (008 is 17 px wide, they are 25 to 27 px: size
+filter), three bases (no intact base exists), `expert_opening_019` (visibility). What this does not
+show: whether the similarity discriminates. Every scored candidate on s01 lies between 0.77 and 0.94,
+so `min_similarity` 0.60 rejects nothing here; T20 must calibrate it. `pilaster_010` and `pilaster_011`
+are targets, not donors, because T13 labels them fragmented (box masks, see T13); with the expert's
+label they would be the donors the three tier C pilasters lack.*
 **What.** Port DINOv2-small loading and embedding from
 `archive/staged_pipeline_v8/02_stage2c_dinov2_repetition.py`. For each fragmented element: gather intact
 elements of the same class, apply the size check, embed crops with damage pixels replaced by the crop

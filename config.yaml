@@ -111,6 +111,18 @@ evidence:
   size_tolerance: 0.35              # initial guess, calibrate in T20
   alternatives_kept: 2
   try_flipped_donor: true
+  # Tier A needs a visible fragment (§5.2). Below this share of visible pixels in the target box the
+  # crops are mostly fill colour and the similarity is meaningless (s01: 0.95 at 8 % visible).
+  min_visible_fraction: 0.25        # initial guess, calibrate in T20
+  # Embedding: each element box is resized to crop_px x crop_px (aspect distortion is the same for
+  # donor and target, whose sizes already agree within size_tolerance) and the patch tokens are
+  # mean-pooled ("mean_patch") or the CLS token is used ("cls").
+  crop_px: 224
+  pooling: mean_patch
+  # Hide the target's damaged part on the donor crop too, so both are compared on the same visible part.
+  mask_donor_like_target: true
+  use_fp16_if_cuda: true
+  batch_size: 16
   tier_b:
     rows_enabled: true              # B1: gap in a row of same-class elements
     row_tolerance: 0.15             # initial guess, calibrate in T20: centre/height agreement and spacing multiple
