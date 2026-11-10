@@ -338,7 +338,13 @@ transferred now, the arch heads arrive as curved rings, and the straight edges a
 disagreements remain and are now explained by the drawn damage mask, not the boxes: 9.8 % of
 `pilaster_011`'s own pixels lie in the mask; `pilaster_010` overlaps 3.3 % but is cut (edge contact
 0.13, box overlap 0.07). Whether `pilaster_010` is cut is for the author; as intact it would become a
-donor for the three pilasters left in tier C. **Use run `20261110_181452` (or later) from now on.***
+donor for the three pilasters left in tier C.
+Follow-up (author's decision, provisional until the author redraws the edge): mask version 3 removes the
+two pilasters' SAM masks, grown by 3 px, from the damage mask (841 px; building `SOURCE.md`). Run
+`outputs/s01_test_church/20261110_181914`: 23 of 23 labels agree with the expert; 19 targets (5 A, 2 B,
+12 C); `pilaster_013` becomes tier A from `pilaster_010`; `recovered_pilaster_046` and `_020` stay tier C
+on the size filter (donors 22-23 px wide against 25-26 px); 5 of 5 tier A completed, 4,971 pixels.
+**Use run `20261110_181914` (or later) from now on.***
 
 ### T17. `i2r/render.py`
 *Status: done. Deviations, both deliberate: the source map is written per view
