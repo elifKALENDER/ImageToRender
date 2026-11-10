@@ -67,12 +67,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     opts = parse_args(argv)
 
-    resume_from = None
-    if opts.from_step != STEPS[0]:
-        cfg = runio.load_config(opts.config)
-        resume_from = runio.latest_run(cfg, opts.structure)
+    try:
+        resume_from = None
+        if opts.from_step != STEPS[0]:
+            cfg = runio.load_config(opts.config)
+            resume_from = runio.latest_run(cfg, opts.structure)
+        run = runio.create_run(opts.structure, opts.config, resume_from=resume_from)
+    except ContractError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        return 2
 
-    run = runio.create_run(opts.structure, opts.config, resume_from=resume_from)
     log = run.logger
     log.info("=" * 72)
     log.info("ImageToRender run %s", run.meta["run_id"])
