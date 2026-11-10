@@ -25,10 +25,11 @@ from i2r.runio import STEPS, VIEWS, ContractError, Run
 
 # Each step is a module in i2r/ exposing run_step(run, opts). Modules are imported only when the
 # step runs, so a later step never pays for loading an earlier step's models. Steps not yet
-# implemented (tasks T13 to T21) only log their name.
+# implemented (tasks T14 to T21) only log their name.
 STEP_MODULES: dict[str, str] = {
     "detect": "i2r.detect",
     "review": "i2r.review",
+    "damage": "i2r.damage",
 }
 
 
@@ -102,7 +103,10 @@ def main(argv: list[str] | None = None) -> int:
             t0 = time.perf_counter()
             log.info("--- step: %s", name)
             step_function(name)(run, opts)
-            run.meta["steps"][name] = {"status": "done", "seconds": round(time.perf_counter() - t0, 2)}
+            # update, not replace: a step may have written its own figures under its name
+            run.meta["steps"].setdefault(name, {}).update(
+                {"status": "done", "seconds": round(time.perf_counter() - t0, 2)}
+            )
             runio.save_meta(run)
     except ContractError as exc:
         status = "failed"

@@ -84,6 +84,25 @@ damage:
   # Connected damage regions smaller than this many pixels are ignored.
   min_region_px: 64
 
+# tools/mask_editor.py: drawing window.
+mask_editor:
+  brush_px: 34
+  max_width: 1200
+  max_height: 780
+
+# tools/mask_editor.py --propose: automatic dark-region proposal. Values copied unchanged from
+# archive/inpaint/inpaint_v3.py; never calibrated. The proposal is a starting point to correct by hand,
+# not a damage mask (real openings are dark too).
+mask_proposal:
+  dark_percentile: 20.0             # pixels at or below this grey percentile count as dark ...
+  max_gray: 100                     # ... but never above this grey value
+  local_contrast: 16                # dark pixel must be this much darker than its blurred surroundings
+  min_area_ratio: 0.0007            # components smaller than this share of the image are dropped
+  max_component_ratio: 0.32         # components larger than this share are dropped
+  close_px: 5
+  expand_px: 5
+  drop_border_components: true
+
 evidence:
   dino_model_id: facebook/dinov2-small
   # Tier A: best donor similarity (DINOv2 cosine) must reach this.

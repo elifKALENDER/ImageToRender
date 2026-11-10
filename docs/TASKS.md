@@ -196,6 +196,23 @@ section to `docs/rnd/RND-001-detection-baseline.md`.
 Neither change lowers class-agnostic recall.
 
 ### T13. `tools/mask_editor.py` and `i2r/damage.py`
+*Status: done. `python tools/mask_editor.py --structure <id> [--propose] [--no-gui]` opens an existing
+mask for editing, or starts from the proposal; it loads no torch (tested). Deviations, both deliberate:
+OpenCV is an optional import in the proposal (as in the archived code; without it the Pillow fallback
+runs), and the proposal and window settings live in new `mask_proposal` / `mask_editor` sections of
+`config.yaml` (archived values, never calibrated). `damage` labels by element-mask overlap and also
+records the box overlap for diagnosis; it copies the mask into the run folder, writes one PNG per
+region, `damage_overlay.png`, and compares with `expert_condition` when present. `run.py` now updates a
+step's `run_meta.json` entry instead of replacing it (the step's own figures were being overwritten).
+Result on s01 (run `outputs/s01_test_church/20261110_172329`, from the imported 23-element inventory,
+n = 1): mask 17.3 % of the image, 3 regions, 12 intact / 11 fragmented, **19 of 23 agree with the
+expert label**. The four disagreements: `pilaster_010` and `pilaster_011` (expert intact) overlap the
+mask by 0.07 and 0.11 because their masks are editor boxes and the drawn mask is loose at its edge;
+`recovered_pilaster_020` and `recovered_pilaster_022` (expert fragmented) have 0 overlap, so the drawn
+mask does not include whatever damage the expert saw on them. The threshold was not tuned to remove
+these (n = 1); the second pair is for the author: either extend `damage_mask.png` over those two
+pilasters or accept that they are not completed. The automatic proposal on s01 marks 2.2 % of the image
+and has IoU 0.00 with the drawn mask (it finds dark openings, not losses): do not rely on it.*
 **What.** (a) Copy `create_mask_with_editor()` and its helpers from `archive/inpaint/inpaint_v3.py` into a
 standalone `tools/mask_editor.py` that imports only Pillow, numpy and Tkinter, with
 `--image`, `--out` and an optional `--propose` flag that pre-loads the automatic dark-region proposal

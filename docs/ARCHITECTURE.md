@@ -126,7 +126,8 @@ Each run writes `outputs/<structure_id>/<timestamp>/` holding every intermediate
 config used, and `run_meta.json` (interpreter path, package versions, git commit).
 
 **Settings file.** One `config.yaml`. Sections: `classes` (name and text prompts for each), `detect`
-(scales, score thresholds), `review` (confidence threshold), `damage` (overlap thresholds), `evidence`
+(scales, score thresholds), `review` (confidence threshold), `editor` (class map for old inventories), `damage` (overlap
+thresholds), `mask_editor` and `mask_proposal` (drawing tool and its dark-region proposal), `evidence`
 (similarity threshold, tier B switches), `restoration` (tone shift, outline, hatch), `first_construction`
 (inpaint strength, steps, prompt), `models` (model IDs). No threshold is hard-coded in a module.
 
@@ -150,7 +151,7 @@ files that are identical to a zip file are moved with `git mv` to keep history.
 | zip `06_...`, zip `09_...v5b...` | `archive/staged_pipeline_v8/` | One editor becomes `tools/inventory_editor.py` (see below) |
 | `ImageToRender4.py`, `ImageToRender3.py` | `archive/variants/` | — |
 | `ImageToRenderEditorPage3B.py` | `tools/inventory_editor.py` *or* `archive/variants/` | The author chooses between this and zip v5b; the other is archived |
-| `ImageToRender2Restoration.py` | `archive/inpaint/inpaint_v3.py` | `tools/mask_editor.py` (mask editor); `i2r/damage.py` (automatic mask proposal); `i2r/complete.py` (ControlNet inpaint set-up for tier C) |
+| `ImageToRender2Restoration.py` | `archive/inpaint/inpaint_v3.py` | `tools/mask_editor.py` (mask editor and the automatic mask proposal, `--propose`); `i2r/complete.py` (ControlNet inpaint set-up for tier C) |
 | `ImageToRender2.py` | `archive/inpaint/inpaint_v6.py` | `i2r/evidence.py`: mirror-across-axis idea |
 | `ImageToRender12_5.py` | `archive/stage5_v1/` | Nothing. Kept as a negative result |
 | `ImageToRender_HybridFuzzyReconstruction_v1.py` | `archive/hybrid_v1/` | Nothing in this stage |
