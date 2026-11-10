@@ -292,6 +292,24 @@ position. A row with the last removed yields none. A mirrored pair with one side
 target. `evidence.json` holds A, B and C records with `confidence`.
 
 ### T16. `i2r/complete.py`, donor transfer and the restoration rule
+*Status: done. View rules are a table (`VIEW_RULES`; the first-construction rule is T18). Decisions:
+donor pixels are its element mask minus its own damaged pixels; tier A alignment is an exhaustive search
+over shifts up to `complete.refine_shift_frac` of the box and the scales in `refine_scales`, scored by
+grey-level normalised correlation on the fragment's visible pixels (ties keep the unshifted placement);
+the donor's mean colour is shifted to the fragment's visible part (`match_colour`); alpha ramps from 0
+at the mask edge to 1 `feather_px` inside, and is 0 outside; overlapping targets are painted in
+increasing confidence. Outputs `<view>_completed.png` (no marking yet, T17), a 16-bit
+`<view>_source.png` label image and `completion.json`. `assert_preserved` raises `PreservationError`;
+a test makes `paint` touch one outside pixel and expects the failure. No torch import (tested).
+Result on s01 (run `outputs/s01_test_church/20261110_175223`, n = 1): 6 of 6 tier A targets completed,
+9,793 pixels changed, none outside the mask. Visually, the two arch heads (`recovered_arch_003`,
+`recovered_arch_001`) and the pilaster feet are restored in place. Weaknesses, stated plainly: the
+element masks are boxes (T12), so each patch carries the wall around the element and ends in straight
+edges, clearest at the right arch; four of six alignments chose a scale at the edge of the searched range
+(1.06 or 0.94), so the range or the score is not settled; correlation after alignment is low for the
+pilasters (0.16 to 0.62, against 0.79 and 0.86 for the arches), partly because their visible parts are
+narrow strips. Up to 404 damage pixels per box stay unfilled where the scaled donor does not reach. All
+for T20; SAM masks for the editor's boxes would address the first point.*
 **What.** Implement donor transfer (§5.5): masked donor crop, affine map to the target box, optional
 flip, alignment refinement for tier A, feathered blend inside the damage mask only, donor ID written to a
 source layer. Implement the restoration rule (§5.3): tier A only, unless `restoration.include_tier_b`.

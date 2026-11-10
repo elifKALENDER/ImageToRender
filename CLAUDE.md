@@ -5,7 +5,7 @@ Research/portfolio repo. Input: a photograph of a damaged historical building. O
 support, never a restoration decision. The owner is an architect and writes in Turkish.
 
 ## Read first
-- `docs/TASKS.md`: ordered task list; continue at the first task without a "Status: done" note (next: T16).
+- `docs/TASKS.md`: ordered task list; continue at the first task without a "Status: done" note (next: T17).
 - `docs/ARCHITECTURE.md`: design (6 modules detect, review, damage, evidence, complete, render; evidence tiers A, B, C).
 - `docs/EXPERIMENTS.md`: what the old experiments were. `archive/README.md`: which run each archived script produced.
 
@@ -33,9 +33,9 @@ support, never a restoration decision. The owner is an architect and writes in T
 - Decide on sensible defaults and say what you chose. Ask only for what is the author's to decide (building identity, licence, merging into main, damage mask for s02).
 
 ## Layout
-`run.py` entry point; `config.yaml`; `i2r/` modules (`runio`, `detect`, `review`, `damage`, `evidence`; more per task); `tools/` (`check_env`, `inventory_editor`, `editor_adapter`, `mask_editor`); `evaluation/evaluate.py`; `tests/`; `data/structures/<id>/`; `docs/`; `archive/`; `outputs/` and `assets/` (local, untracked).
+`run.py` entry point; `config.yaml`; `i2r/` modules (`runio`, `detect`, `review`, `damage`, `evidence`, `complete`; more per task); `tools/` (`check_env`, `inventory_editor`, `editor_adapter`, `mask_editor`); `evaluation/evaluate.py`; `tests/`; `data/structures/<id>/`; `docs/`; `archive/`; `outputs/` and `assets/` (local, untracked).
 
 ## Current state
-- Detect (OWL-ViT + SAM), review, editor adapter, mask editor, damage and evidence (tiers A, B, C) are done (s01: 6 A, 2 B, 13 C; T14 and T15 notes). s01 damage labels agree with the expert on 21 of 23 elements after the mask was extended (T13 note; mask version 2). s01 recall against the expert inventory: 52 % class-aware (RND-001, n = 1).
+- Detect (OWL-ViT + SAM), review, editor adapter, mask editor, damage, evidence (tiers A, B, C) and donor transfer for the restoration view are done (s01: 6 A, 2 B, 13 C; 6 of 6 A completed; T14 to T16 notes). s01 damage labels agree with the expert on 21 of 23 elements after the mask was extended (T13 note; mask version 2). s01 recall against the expert inventory: 52 % class-aware (RND-001, n = 1).
 - Use the imported 23-element inventory of s01 (T12 note in `docs/TASKS.md`), not raw detections, to develop T14-T18.
 - Open author items: building identity/source/licence and larger copies of both photos; merge into `main`; deleting local branch `backup-before-rewrite`; s02 damage mask. Decision 2026-11-10: work on s01 only until the pipeline is complete; s02 gets its own later session.

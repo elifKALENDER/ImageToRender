@@ -142,6 +142,19 @@ evidence:
     # Set it per building in data/structures/<id>/structure.yaml.
     symmetry_axis_x: null
 
+complete:
+  # Donor transfer (docs/ARCHITECTURE.md §5.5).
+  # Tier A alignment search against the fragment's visible part: shifts up to this share of the
+  # target box size (1 px steps) and these scale factors; score = grey-level normalised correlation.
+  refine_shift_frac: 0.10           # initial guess, calibrate in T20
+  refine_scales: [0.94, 1.0, 1.06]  # initial guess, calibrate in T20
+  # The search runs only when at least this many visible fragment pixels overlap the donor.
+  refine_min_visible_px: 50
+  # Shift the donor's mean colour to the fragment's visible part (lighting differs across a facade).
+  match_colour: true
+  # Alpha ramps from 0 at the damage-mask edge to 1 this many pixels inside it; outside it stays 0.
+  feather_px: 2
+
 restoration:
   include_tier_b: false             # Venice Charter: stop where conjecture begins (§5.3, D4)
   tone_shift: 0.08                  # lightness change applied to completed regions, 0..1
