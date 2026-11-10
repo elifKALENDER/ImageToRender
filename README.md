@@ -36,14 +36,14 @@ güncellemek ortamı bozar.
 - `models/mobile_sam.pt` (MobileSAM)
 - `loras/*.safetensors` (LoRA ağırlıkları)
 
-## Kullanım
+## Durum
 
-Görsel üretim akışı ve prompt şablonları için [`GUIDE.md`](GUIDE.md). Çıktılar `outputs/`
-altına yazılır (versiyon kontrolü dışındadır).
+Repo yeniden yapılandırılıyor. Plan ve görevler: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
+[`docs/TASKS.md`](docs/TASKS.md). Eski denemelerin dökümü: [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md).
+Önceki tüm betikler [`archive/`](archive/README.md) altında, çalıştı/çalışmadı bilgisiyle duruyor.
+Yeni pipeline (`run.py`) henüz yazılmadı.
 
-Betikler aşama sırasıyla ilerler: tespit (Stage 1) → tekrar/eksen analizi (Stage 2) →
-iskelet, perspektif aileleri, mimari ilişkiler ve cephe bölümleri (Stage 3) → geometrik
-rekonstrüksiyon (Stage 4). Stage 5 henüz aktif değildir.
+Ortamı denetlemek için: `python tools/check_env.py`.
 
 ## Lisans
 
