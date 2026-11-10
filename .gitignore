@@ -4,6 +4,9 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+build/
+dist/
 
 # ===============================
 # Virtual environments
@@ -14,78 +17,39 @@ env/
 ENV/
 
 # ===============================
-# TensorFlow / Keras
-# ===============================
-# Saved models
-*.h5
-*.keras
-saved_models/
-checkpoints/
-logs/
-
-# TensorBoard
-runs/
-tb_logs/
-
-# ===============================
-# Data / Datasets
-# ===============================
-data/
-datasets/
-mnist_data/
-
-# ===============================
-# Jupyter
-# ===============================
-.ipynb_checkpoints/
-
-# ===============================
-# PyCharm
+# IDE / editor
 # ===============================
 .idea/
 *.iml
-
-# ===============================
-# VS Code (opsiyonel)
-# ===============================
 .vscode/
+.claude/
 
 # ===============================
 # OS files
 # ===============================
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # ===============================
-# Experiment / temp outputs
+# Model weights & ML artifacts (large, never commit)
 # ===============================
-*.log
-*.tmp
-*.out
+models/
+loras/
+*.ckpt
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+*.h5
+*.keras
+*.npy
+*.npz
+saved_models/
+checkpoints/
 
-# ===============================
-# Coverage / testing
-# ===============================
-.coverage
-htmlcov/
-.pytest_cache/
-
-# ===============================
-# Environment variables
-# ===============================
-.env
-.env.*
-
-# ===============================
-# Packaging
-# ===============================
-build/
-dist/
-*.egg-info/
-
-# ===============================
-# Diffusers / Hugging Face
-# ===============================
+# Hugging Face / diffusers caches
 .cache/
 .huggingface/
 hf_cache/
@@ -93,26 +57,55 @@ hf_hub/
 models--*/
 
 # ===============================
-# Generated images / experiments
+# Generated outputs / experiments
 # ===============================
 outputs/
 results/
 runs/
+logs/
+tb_logs/
+*.log
+*.tmp
+*.out
 
+# Generated / input images (local only)
 *.png
 *.jpg
 *.jpeg
 *.webp
 
 # ===============================
-# Model weights (NEVER COMMIT)
+# Data / datasets
 # ===============================
-*.ckpt
-*.safetensors
-*.bin
-*.pt
+data/
+datasets/
+mnist_data/
 
-!assets/
-!assets/*.png
+# ===============================
+# Local snapshots, archives & scratch
+# ===============================
+*.zip
+*.7z
+*.tar.gz
+archive/
+assets/
 old_codes.txt
-/assets
+setup/_old_*
+
+# ===============================
+# Jupyter
+# ===============================
+.ipynb_checkpoints/
+
+# ===============================
+# Testing / coverage
+# ===============================
+.coverage
+htmlcov/
+.pytest_cache/
+
+# ===============================
+# Environment variables / secrets
+# ===============================
+.env
+.env.*
