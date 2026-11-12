@@ -36,7 +36,7 @@ support, never a restoration decision. The owner is an architect and writes in T
 `run.py` entry point; `config.yaml`; `i2r/` modules (`runio`, `detect`, `review`, `damage`, `evidence`, `complete`, `render`); `tools/` (`check_env`, `inventory_editor`, `editor_adapter`, `mask_editor`, `refine_masks`, `synthetic_damage`); `evaluation/evaluate.py`; `tests/`; `data/structures/<id>/`; `docs/`; `archive/`; `outputs/` and `assets/` (local, untracked).
 
 ## Current state
-- Done: T1 to T19 plus T16b (detect OWL-ViT + SAM, review, editor adapter, mask editor, damage, evidence tiers A/B/C, donor transfer, restoration view, first-construction view, `tools/refine_masks.py`, synthetic damage `tools/synthetic_damage.py` + `evaluation/evaluate.py completion`). All six `run.py` steps are real. 120 tests pass.
+- Done: T1 to T20 plus T16b (detect OWL-ViT + SAM, review, editor adapter, mask editor, damage, evidence tiers A/B/C, donor transfer, restoration view, first-construction view, `tools/refine_masks.py`, synthetic damage `tools/synthetic_damage.py` + `evaluation/evaluate.py completion`). All six `run.py` steps are real. 124 tests pass.
 - s01 (n = 1): damage mask version 3 (provisional, see `data/structures/s01_test_church/SOURCE.md`); damage labels agree with the expert on 23 of 23 elements after two mask corrections made where they disagreed (19 of 23 with the author's first mask); 19 targets (5 A, 2 B, 12 C). Restoration view completes 5 targets (4,971 px); first-construction view 7 targets (11,367 px); the two views differ only inside the B boxes. Recall of raw detections against the expert inventory: 52 % class-aware (RND-001).
 - Reference runs: `outputs/s01_test_church/20261110_181914` (SAM-refined inventory, mask v3) and `outputs/s01_test_church/20261110_182638` (both views, latest). Develop from these, not from raw detections (oversized boxes).
 - Re-run: `python run.py --structure s01_test_church --from damage --view both --no-review`.
@@ -44,15 +44,18 @@ support, never a restoration decision. The owner is an architect and writes in T
 ## Where we stopped (2026-11-12)
 - T19 done (see its status note in `docs/TASKS.md`): s01 synthetic test, 28 cases, preservation 0; partial 9/12 tier A, full 1/12 (B rules rarely fire), background abstention 4/4 in the restoration view, one B1 false positive in the first-construction view. Evaluation: `outputs/synthetic/s01_test_church/20261112_122615/eval_20261112_122636/completion.md`.
 - Re-run: `python tools/synthetic_damage.py --run <run>` then `python evaluation/evaluate.py completion --cases <cases folder>` (about 3 minutes for 28 cases).
-- Next: a second structure under T22 rules (needs the author's photograph and mask), then T20 calibrate thresholds (RND-002) on both, T21 generative tier C (optional, cap the attempts), T23, T24 README/examples, T25 clean clone, merge, tag.
-- Known weaknesses for T20: alignment scale hits the search bounds; low NCC on pilasters; the size filter blocks `recovered_pilaster_046`, `recovered_pilaster_020` and, in the synthetic test, `recovered_arch_025` and `expert_cornice_021`; `min_similarity` 0.60 does not discriminate (scores 0.77-0.94); the two B1 slots (x 343-366, 400-423) are doubtful and B1 made a slot on plain wall in `background__bg01`.
+- T20 done (2026-11-12, `docs/rnd/RND-002-evidence-baseline.md`): `min_similarity` 0.80, `size_tolerance` 0.35, `row_tolerance` 0.15; s01 result unchanged; 4 of the 10 Stage 3C-C hypotheses found. Grid: `python evaluation/evaluate.py grid --cases <cases> --grid key=v1,v2 ...` (about 1 minute per point).
+- Next: T21 generative tier C (optional, cap the attempts), T24 README/examples, T25 clean clone, merge, tag. T22-T23 skipped (author decision 2026-11-12).
+- Known weaknesses (after T20): alignment scale hits the search bounds; low NCC on pilasters; the size filter blocks `recovered_pilaster_046`, `recovered_pilaster_020` and, in the synthetic test, `recovered_arch_025` and `expert_cornice_021`; `min_similarity` cannot be tested without negatives (R-002a); the two B1 slots (x 343-366, 400-423) are doubtful and B1 made a slot on plain wall in `background__bg01`.
 - Scale test (2026-11-12): `s01_test_church_upscaled` (Upscayl 3x, AI upscaler, not a new photo; see its `SOURCE.md`) showed that pixel settings did not follow image size; fixed the same day by `scale` in `config.yaml` (`runio.apply_pixel_scale`, reference 904 px; s01 outputs byte-identical). After the fix the copy gives the same targets, tiers and markings as s01; only 2 of 5 donors differ (upscaler texture). Not usable for calibration.
 
 ## Open author items
-- Building identity/source/licence and larger copies of both photos (the author has found more photos of s01, not added yet: R5 in `docs/TASKS.md`); merge into `main`; deleting local branch `backup-before-rewrite`; s02 damage mask; redraw the s01 mask edge near `pilaster_010`/`pilaster_011` (mask v3 is provisional); confirm opening → window.
+- Building identity/source/licence and larger copies of both photos (the author has found more photos of s01, not added yet: R5 in `docs/TASKS.md`); merge into `main`; deleting local branch `backup-before-rewrite`; redraw the s01 mask edge near `pilaster_010`/`pilaster_011` (mask v3 is provisional); confirm opening → window.
 - Decision 2026-11-10: work on s01 only until the pipeline is complete; s02 gets its own later session.
   **Changed 2026-11-12** (after the roadmap check): T19 on s01, then a second structure under T22 rules
   (no code or config change, every correction logged) **before** T20, so thresholds are not tuned on one
-  building. The second structure is s02 (1045 x 1080, needs the author's mask and inventory) or a new
-  photograph the author is looking for (§8: long side >= 1500 px, known licence). Upscaling a small
-  photograph does not count: it adds no evidence.
+  building. Upscaling a small photograph does not count: it adds no evidence.
+  **Author decision 2026-11-12 (final): no other photograph.** s02 is dropped and no new or alternative
+  photo is used; work continues on s01 only. T22-T23 are skipped for this stage. T20 calibrates on the
+  original s01 image; `s01_test_church_upscaled` is a scale check only (its texture is invented). Every
+  result stays n = 1 building, tuned and reported on the same building.

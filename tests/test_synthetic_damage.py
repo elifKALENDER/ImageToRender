@@ -183,3 +183,38 @@ class ScoringTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GridTest(unittest.TestCase):
+    def test_parse_grid_and_points(self) -> None:
+        grid = evaluate.parse_grid(["evidence.min_similarity=0.6,0.8", "evidence.tier_b.row_tolerance=0.1"])
+        self.assertEqual(grid, [("evidence.min_similarity", [0.6, 0.8]), ("evidence.tier_b.row_tolerance", [0.1])])
+        points = evaluate.grid_points(grid)
+        self.assertEqual(len(points), 2)
+        self.assertEqual(points[1], {"evidence.min_similarity": 0.8, "evidence.tier_b.row_tolerance": 0.1})
+
+    def test_parse_grid_rejects_bad_specs_and_model_keys(self) -> None:
+        with self.assertRaises(ContractError):
+            evaluate.parse_grid(["evidence.min_similarity"])
+        with self.assertRaises(ContractError):
+            evaluate.parse_grid(["evidence.crop_px=112,224"])
+
+    def test_set_dotted_copies_and_checks_the_key(self) -> None:
+        cfg = {"evidence": {"min_similarity": 0.6, "tier_b": {"row_tolerance": 0.15}}}
+        out = evaluate.set_dotted(cfg, "evidence.tier_b.row_tolerance", 0.25)
+        self.assertEqual(out["evidence"]["tier_b"]["row_tolerance"], 0.25)
+        self.assertEqual(cfg["evidence"]["tier_b"]["row_tolerance"], 0.15)
+        with self.assertRaises(ContractError):
+            evaluate.set_dotted(cfg, "evidence.min_similiarity", 0.7)
+        with self.assertRaises(ContractError):
+            evaluate.set_dotted(cfg, "nothing.here", 1)
+
+    def test_grid_summary(self) -> None:
+        rows = [
+            {"variant": "partial", "tier_correct": True, "recovered": True},
+            {"variant": "full", "tier_correct": False, "recovered": False},
+            {"variant": "background", "tier_correct": True, "recovered": None},
+        ]
+        s = evaluate.grid_summary(rows, {"by_tier": {"A": 1}})
+        self.assertEqual((s["partial_recovery"], s["full_recovery"], s["background_tier_c"]), (1.0, 0.0, 1.0))
+        self.assertAlmostEqual(s["tier_accuracy"], 2 / 3)

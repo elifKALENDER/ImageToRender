@@ -1,8 +1,9 @@
 # ImageToRender — the single settings file.
 #
 # Every threshold used by the pipeline lives here; modules must not hard-code them.
-# Values marked "initial guess, calibrate in T20" are not validated yet and must not be
-# reported as tuned before the synthetic damage test (docs/ARCHITECTURE.md §7) has run.
+# Values marked "initial guess" are not validated and must not be reported as tuned. T20 (RND-002)
+# calibrated only evidence.min_similarity, evidence.size_tolerance and evidence.tier_b.row_tolerance, on
+# s01 alone (n = 1): those three are "chosen", not "validated on other buildings".
 # A building can override any value in data/structures/<id>/structure.yaml (same layout, only the
 # keys that differ). Each run writes the merged, effective settings into its run folder as
 # config.yaml, so results stay reproducible.
@@ -93,7 +94,7 @@ detect:
 review:
   # Elements with a detector score below this are shown to the expert for confirmation.
   # On s01 every detector score is below 0.06 (RND-001), so 0.15 means every element is reviewed.
-  confidence_threshold: 0.15        # initial guess, calibrate in T20
+  confidence_threshold: 0.15        # initial guess, not calibrated
   open_overlay: true                # open review_overlay.png in the default image viewer
 
 editor:
@@ -111,12 +112,12 @@ refine_masks:
 
 damage:
   # An element is "intact" when the share of its mask inside the damage mask is below this ...
-  intact_max_overlap: 0.05          # initial guess, calibrate in T20 (§5.1)
+  intact_max_overlap: 0.05          # initial guess, not calibrated (§5.1)
   # ... and it is not "cut" by the damage mask (§5.1): at least this share of the mask's edge pixels
   # lie within cut_margin_px of a damage pixel. Needed for masks that cover only the visible part of an
   # element (SAM), whose overlap with the damage stays small even when half the element is gone.
   cut_margin_px: 2
-  cut_min_contact: 0.10             # initial guess, calibrate in T20
+  cut_min_contact: 0.10             # initial guess, not calibrated
   # A damage mask covering less than this share of the image is treated as empty (error).
   min_mask_fraction: 0.001
   # Connected damage regions smaller than this many pixels are ignored.
@@ -144,14 +145,19 @@ mask_proposal:
 evidence:
   dino_model_id: facebook/dinov2-small
   # Tier A: best donor similarity (DINOv2 cosine) must reach this.
-  min_similarity: 0.60              # initial guess, calibrate in T20 (§5.2)
+  # Chosen in T20 on s01 (n = 1, tuned and reported on the same building; RND-002): 0.60 and 0.80 give the
+  # same result at size_tolerance 0.35 (true donors scored 0.83-0.93); 0.80 also rejects the two doubtful
+  # stretched donors that size_tolerance 0.50 lets in (0.73, 0.78); 0.88 loses true donors.
+  min_similarity: 0.80
   # Donor and target width and height ratios must lie within 1 +/- size_tolerance.
-  size_tolerance: 0.35              # initial guess, calibrate in T20
+  # Kept in T20 (RND-002): 0.25 loses 3 of 9 partial recoveries; 0.50 recovers 2 more only through donors
+  # of clearly different proportions (e.g. an arch of 36 x 48 px for one of 70 x 34 px).
+  size_tolerance: 0.35
   alternatives_kept: 2
   try_flipped_donor: true
   # Tier A needs a visible fragment (§5.2). Below this share of visible pixels in the target box the
   # crops are mostly fill colour and the similarity is meaningless (s01: 0.95 at 8 % visible).
-  min_visible_fraction: 0.25        # initial guess, calibrate in T20
+  min_visible_fraction: 0.25        # initial guess, not calibrated
   # Embedding: each element box is resized to crop_px x crop_px (aspect distortion is the same for
   # donor and target, whose sizes already agree within size_tolerance) and the patch tokens are
   # mean-pooled ("mean_patch") or the CLS token is used ("cls").
@@ -163,23 +169,26 @@ evidence:
   batch_size: 16
   tier_b:
     rows_enabled: true              # B1: gap in a row of same-class elements
-    row_tolerance: 0.15             # initial guess, calibrate in T20: centre/height agreement and spacing multiple
+    # Centre/height agreement and spacing multiple. Kept in T20 (RND-002): 0.10 and 0.15 give the same result;
+    # 0.25 recovers 7 of 12 hidden elements but puts 6 overlapping pilaster slots ~20 px apart and an arch
+    # slot into the real collapse of s01.
+    row_tolerance: 0.15
     symmetry_enabled: true          # B2: mirror across the facade symmetry axis
-    symmetry_min_agreement: 0.60    # initial guess, calibrate in T20; below this B2 is switched off
+    symmetry_min_agreement: 0.60    # initial guess, not calibrated; below this B2 is switched off
     # B1 needs at least this many observed elements in a row to estimate its spacing.
     min_row_size: 3
     # An implied slot must lie at least this much inside the damage mask ...
-    slot_min_damage: 0.50           # initial guess, calibrate in T20
+    slot_min_damage: 0.50           # initial guess, not calibrated
     # ... and no same-class element may cover more than this share of it.
-    slot_free_max_overlap: 0.30     # initial guess, calibrate in T20
+    slot_free_max_overlap: 0.30     # initial guess, not calibrated
     # B2: a mirrored element "matches" when its IoU with a same-class element reaches this.
-    mirror_match_iou: 0.30          # initial guess, calibrate in T20
+    mirror_match_iou: 0.30          # initial guess, not calibrated
     # An implied slot (B1) or mirrored box (B2) is dropped when less than this share of it lies in the image.
-    slot_min_inside_image: 0.50     # initial guess, calibrate in T20
+    slot_min_inside_image: 0.50     # initial guess, not calibrated
     # B2: an element whose mirror overlaps itself by more than this IoU sits on the axis and implies nothing.
-    on_axis_iou: 0.50               # initial guess, calibrate in T20
+    on_axis_iou: 0.50               # initial guess, not calibrated
     # Two implied slots of one class overlapping by more than this IoU are one slot (B1 and B2 agree).
-    same_slot_iou: 0.50             # initial guess, calibrate in T20
+    same_slot_iou: 0.50             # initial guess, not calibrated
     # B2: an axis is scored only when at least this many elements can be checked against it.
     symmetry_min_elements: 4
     # B2: vertical axis x in image pixels, given by the author; null = estimate from the elements.
@@ -190,8 +199,8 @@ complete:
   # Donor transfer (docs/ARCHITECTURE.md §5.5).
   # Tier A alignment search against the fragment's visible part: shifts up to this share of the
   # target box size (1 px steps) and these scale factors; score = grey-level normalised correlation.
-  refine_shift_frac: 0.10           # initial guess, calibrate in T20
-  refine_scales: [0.94, 1.0, 1.06]  # initial guess, calibrate in T20
+  refine_shift_frac: 0.10           # initial guess, not calibrated
+  refine_scales: [0.94, 1.0, 1.06]  # initial guess, not calibrated
   # The search runs only when at least this many visible fragment pixels overlap the donor.
   refine_min_visible_px: 50
   # Shift the donor's mean colour to the fragment's visible part (lighting differs across a facade).

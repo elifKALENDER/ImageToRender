@@ -3,7 +3,8 @@
 > **Türkçe özet.** Bu belge `docs/ARCHITECTURE.md` içindeki mimariyi Opus'un uygulayacağı küçük, sıralı
 > görevlere böler. İlk görevler yeni klasör yapısını kurar ve eski denemeleri `archive/`'e taşır; sonra
 > pipeline modül modül kurulur. Her görev tek oturumluktur ve "ne / hangi dosyalar / kabul ölçütü" içerir.
-> "v1 bitti" noktası: tek komutla çalışan demo, iki yapıda iki çıktı ve README.
+> "v1 bitti" noktası: tek komutla çalışan demo, s01 üzerinde iki çıktı ve README (12 Kasım 2026
+> kararıyla ikinci yapı bu aşamada yok).
 
 ## Before you start
 
@@ -12,8 +13,9 @@
 - Do the tasks in order. Do not start a task until the previous one meets its acceptance criteria.
 - Work on a branch, never on `main`. The plan was `refactor/structure` for Phase 0 and `feat/pipeline`
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
-- **Status (2026-11-12): T01 to T19, T12b and T16b are done. Next: a second structure under T22 rules,
-  then T20** (order changed on 2026-11-12, see `CLAUDE.md`; T22 needs the author's photograph and mask). T12 to T18 carry a
+- **Status (2026-11-12): T01 to T20, T12b and T16b are done. The next task is T21 (optional).** Author decision
+  2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
+  skipped. Everything is developed, tuned and reported on s01 (n = 1 building). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
   deviations worth recording (their commits are `chore(T01)` to `feat(T11)` in the git log).
 - **The environment is fixed.** Use the conda env `ImageToRender_GPU`. Do not install, upgrade or remove
@@ -115,7 +117,7 @@ version differs.
 
 ## Phase 1 — Pipeline, module by module
 
-*Status: T08 to T19 done (T08 to T11 without a note of their own). T20 and T21 open.*
+*Status: T08 to T20 done (T08 to T11 without a note of their own). T21 open.*
 
 ### T08. `config.yaml`, `i2r/runio.py`, `run.py` skeleton
 **What.** Create `config.yaml` with every section named in §3 and the initial values given in §5 (mark
@@ -426,6 +428,13 @@ case (`--no-review`) and compute the metrics in §7.1. Write a CSV and a Markdow
 the table. Preservation is 0 in every row.
 
 ### T20. Calibrate thresholds and write the baseline
+*Status: done (`docs/rnd/RND-002-evidence-baseline.md`). `evaluation/evaluate.py grid` runs damage and
+evidence for every combination on the 28 synthetic cases and the real damage, with one shared DINOv2.
+27 points. Chosen: `min_similarity` 0.60 -> 0.80, `size_tolerance` 0.35 and `row_tolerance` 0.15 kept
+(looser values only add doubtful donors or overlapping B1 slots in the real collapse). Result unchanged
+on s01: partial 9/12, full 1/12, background 3/4 left C; real damage 5 A, 2 B, 12 C. Against the 10
+approved Stage 3C-C hypotheses: 4 found (5 counting an arch at IoU 0.44). n = 1, tuned and reported on
+the same building. Other thresholds were not varied and stay "initial guess, not calibrated".*
 **What.** Using T19, vary `evidence.min_similarity`, `evidence.size_tolerance` and the B1 tolerance over a
 small grid and record recovery rate, tier accuracy and abstention. Choose values, update `config.yaml`,
 and remove the "initial guess" comments. Write `docs/rnd/RND-002-evidence-baseline.md` with the tables,
@@ -453,7 +462,10 @@ default (`first_construction.generative: false`) and continue; that outcome comp
 
 ## Phase 2 — Second structure and v1
 
-### T22. Second structure, unchanged pipeline [needs author]
+*Status: T22 and T23 skipped by author decision (2026-11-12): no second structure and no other
+photograph in this stage; s02 is dropped. They stay listed for a later stage. Next after T20/T21: T24.*
+
+### T22. Second structure, unchanged pipeline [needs author] — skipped in this stage
 **What.** The author supplies a second photograph that meets §8, with `SOURCE.md`, and draws the damage
 mask with `tools/mask_editor.py`. Run the full chain with review. **Do not change pipeline code or
 config during this task.** Record every failure, every manual correction (review decisions, elements
@@ -462,7 +474,7 @@ added in the editor) and the time spent.
 **Accept.** Either both views exist for structure 2, or the note states exactly which step failed and
 why. Both outcomes complete the task.
 
-### T23. Fix what the second structure broke
+### T23. Fix what the second structure broke — skipped in this stage
 **What.** Address the failures from T22, one commit per fix, each with a test. Re-run T19's evaluation
 on structure 1 and confirm the numbers did not get worse, or explain why they changed.
 **Files.** As required in `i2r/`, `tests/`.
@@ -480,7 +492,7 @@ table, example images, install, the one-command demo, the results tables with n 
 
 ### T25. Fresh-clone check and tag
 **What.** Clone the repository into a new folder, activate the conda env, follow the README only, and
-run the demo on both structures. Fix anything missing. Merge to `main` and tag `v0.1.0`.
+run the demo on s01. Fix anything missing. Merge to `main` and tag `v0.1.0`.
 **Files.** As needed.
 **Accept.** The definition below is met.
 
@@ -491,9 +503,10 @@ run the demo on both structures. Fix anything missing. Merge to `main` and tag `
 All of the following hold on a fresh clone in the conda env:
 
 1. `python tools/check_env.py` and `python -m unittest discover tests` pass.
-2. `python run.py --structure <id>` produces, for **two structures**, `restoration.png`,
+2. `python run.py --structure <id>` produces, for s01 (one structure; the planned second structure was
+   dropped on 2026-11-12, author decision), `restoration.png`,
    `first_construction.png`, `provenance.json` and `source_map.png`.
-3. Pixel difference outside the damage mask is 0 for both views on both structures.
+3. Pixel difference outside the damage mask is 0 for both views.
 4. Every completed region has a provenance entry naming its donor, tier and confidence, or is marked
    conjecture.
 5. The restoration view contains no generative pixels.

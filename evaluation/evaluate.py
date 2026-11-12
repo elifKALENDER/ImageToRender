@@ -6,6 +6,12 @@
 
     python evaluation/evaluate.py completion --cases outputs/synthetic/<structure>/<timestamp>
         [--config config.yaml] [--only <case_id>,...] [--no-perceptual]
+    python evaluation/evaluate.py grid --cases <same> --grid evidence.min_similarity=0.6,0.75 [--grid ...]
+
+`grid` (T20) runs only the damage and evidence steps for every combination of the given settings, on
+every synthetic case and on the real damage of the cases' base run, with one shared DINOv2 model, and
+writes grid.md / grid.json: recovery per variant, background left tier C, tier accuracy, and the real
+damage's A/B/C counts with every A/B target.
 
 `detection` compares detector output with a reference inventory (docs/ARCHITECTURE.md §7.3):
 per-class recall, precision and mean box IoU of matched pairs.
@@ -338,24 +344,25 @@ def hidden_crop_box(hidden: np.ndarray) -> list[int]:
     return [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1]
 
 
-def run_case(case_dir: Path, eval_dir: Path, cfg: dict[str, Any], structure_id: str) -> tuple[Path, str]:
-    """Copy the seed into a fresh run folder and run the steps from damage. Returns (run folder, status)."""
+def run_steps(seed_dir: Path, structure_dir: Path, run_dir: Path, cfg: dict[str, Any], structure_id: str,
+              steps: Sequence[str] = COMPLETION_STEPS, label: str = "") -> str:
+    """Copy ``seed_dir`` (elements.json, element masks) into ``run_dir`` and run ``steps`` in this process
+    with ``structure_dir`` as the folder holding image.png and damage_mask.png. Returns the status."""
     from argparse import Namespace
 
     from i2r import runio
 
-    run_dir = eval_dir / case_dir.name
-    shutil.copytree(case_dir / "seed", run_dir)
+    shutil.copytree(seed_dir, run_dir)
     with (run_dir / "config.yaml").open("w", encoding="utf-8", newline="\n") as fh:
         yaml.safe_dump(cfg, fh, sort_keys=False, allow_unicode=True)
     logger = runio.setup_logger(run_dir)
-    run = runio.Run(structure_id, case_dir, run_dir, cfg, logger,
-                    {"run_id": f"{structure_id}/synthetic/{case_dir.name}", "case_dir": runio.relative(case_dir),
+    run = runio.Run(structure_id, structure_dir, run_dir, cfg, logger,
+                    {"run_id": f"{structure_id}/{label or run_dir.name}", "structure_dir": runio.relative(structure_dir),
                      "steps": {}, "git_commit": runio.git_commit()})
     opts = Namespace(views=list(VIEW_NAMES), no_review=True, view="both", from_step="damage")
     status = "completed"
     try:
-        for name in COMPLETION_STEPS:
+        for name in steps:
             importlib.import_module(f"i2r.{name}").run_step(run, opts)
             run.meta["steps"].setdefault(name, {})["status"] = "done"
     except ContractError as exc:
@@ -365,6 +372,14 @@ def run_case(case_dir: Path, eval_dir: Path, cfg: dict[str, Any], structure_id: 
         run.meta["status"] = status
         runio.save_meta(run)
         runio.close_logger(run)
+    return status
+
+
+def run_case(case_dir: Path, eval_dir: Path, cfg: dict[str, Any], structure_id: str,
+             steps: Sequence[str] = COMPLETION_STEPS) -> tuple[Path, str]:
+    """Run one synthetic case from the damage step. Returns (run folder, status)."""
+    run_dir = eval_dir / case_dir.name
+    status = run_steps(case_dir / "seed", case_dir, run_dir, cfg, structure_id, steps, f"synthetic/{case_dir.name}")
     return run_dir, status
 
 
@@ -570,6 +585,192 @@ def cmd_completion(args: argparse.Namespace) -> int:
     return 0 if worst == 0 else 1
 
 
+# ---------------------------------------------------------------------------
+# grid (T20): vary evidence thresholds, damage + evidence steps only
+# ---------------------------------------------------------------------------
+
+GRID_STEPS = ("damage", "evidence")
+# Settings the shared DINOv2 model depends on; a grid must not vary them.
+EMBEDDER_KEYS = {"evidence.dino_model_id", "evidence.pooling", "evidence.crop_px", "evidence.use_fp16_if_cuda",
+                 "evidence.batch_size"}
+
+
+def parse_grid(specs: Sequence[str]) -> list[tuple[str, list[Any]]]:
+    """``key=v1,v2`` (dotted key, values parsed as YAML) -> [(key, [v1, v2])]."""
+    out = []
+    for spec in specs:
+        key, sep, values = spec.partition("=")
+        key = key.strip()
+        if not sep or not key or not values:
+            raise ContractError(f"--grid expects key=v1,v2,...; got {spec!r}")
+        if key in EMBEDDER_KEYS:
+            raise ContractError(f"--grid cannot vary {key}: the DINOv2 model is shared across the grid")
+        out.append((key, [yaml.safe_load(v) for v in values.split(",")]))
+    return out
+
+
+def set_dotted(cfg: dict[str, Any], key: str, value: Any) -> dict[str, Any]:
+    """Copy of ``cfg`` with the existing setting ``a.b.c`` replaced (ContractError if it does not exist)."""
+    import copy
+
+    out = copy.deepcopy(cfg)
+    node = out
+    parts = key.split(".")
+    for part in parts[:-1]:
+        if not isinstance(node.get(part), dict):
+            raise ContractError(f"--grid: {key} is not a setting")
+        node = node[part]
+    if parts[-1] not in node:
+        raise ContractError(f"--grid: {key} is not a setting")
+    node[parts[-1]] = value
+    return out
+
+
+def grid_points(grid: list[tuple[str, list[Any]]]) -> list[dict[str, Any]]:
+    import itertools
+
+    keys = [k for k, _ in grid]
+    return [dict(zip(keys, combo)) for combo in itertools.product(*(v for _, v in grid))]
+
+
+class _SharedEmbedder:
+    """Replaces evidence.Dinov2Embedder during a grid so the model loads once (evaluation only)."""
+
+    inner: Any = None
+
+    def __init__(self, ecfg: dict[str, Any], log: Any) -> None:
+        self.device, self.fp16 = self.inner.device, self.inner.fp16
+
+    def __call__(self, images: list[np.ndarray]) -> np.ndarray:
+        return self.inner(images)
+
+    def close(self) -> None:
+        pass
+
+
+def grid_case_row(gt: dict[str, Any], records: list[dict[str, Any]], scfg: dict[str, Any]) -> dict[str, Any]:
+    a = assign_case(gt, records, scfg)
+    t = a["target"]
+    return {"case_id": gt["case_id"], "variant": gt["variant"], "expected_tier": gt["expected_tier"],
+            "tier": a["tier"], "tier_correct": a["tier"] == gt["expected_tier"], "recovered": a["recovered"],
+            "donor_id": t.get("donor_id") if t else None, "similarity": t.get("similarity") if t else None,
+            "rule": t.get("rule") if t else None}
+
+
+def grid_summary(rows: list[dict[str, Any]], real: dict[str, Any]) -> dict[str, Any]:
+    def share(variant: str, key: str) -> float | None:
+        return mean([r[key] for r in rows if r["variant"] == variant and r.get(key) is not None])
+
+    return {
+        "partial_recovery": share("partial", "recovered"),
+        "full_recovery": share("full", "recovered"),
+        "background_tier_c": share("background", "tier_correct"),
+        "tier_accuracy": mean([r["tier_correct"] for r in rows]),
+        "real_by_tier": real.get("by_tier"),
+        "real_ab_targets": real.get("ab_targets"),
+    }
+
+
+def grid_markdown(points: list[dict[str, Any]], header: dict[str, Any]) -> str:
+    keys = list(points[0]["settings"]) if points else []
+    lines = [
+        f"Cases: `{header['cases']}` ({header['n_cases']} cases); real damage: `{header['real_seed']}`  ",
+        "Structures: 1 (n = 1). Thresholds are tuned and reported on the same building. Steps: damage, evidence.  ",
+        f"Config: `{header['config']}`, git {header['git']}",
+        "",
+        "| Point | " + " | ".join(keys) + " | Partial recovery (A) | Full recovery (B) | Background left C | "
+        "Tier accuracy | Real damage A/B/C |",
+        "|" + "---|" * (len(keys) + 6),
+    ]
+    for p in points:
+        s = p["summary"]
+        t = s["real_by_tier"] or {}
+        lines.append(f"| {p['label']} | " + " | ".join(str(p["settings"][k]) for k in keys) + " | "
+                     f"{fmt(s['partial_recovery'], True)} | {fmt(s['full_recovery'], True)} | "
+                     f"{fmt(s['background_tier_c'], True)} | {fmt(s['tier_accuracy'], True)} | "
+                     f"{t.get('A', 0)}/{t.get('B', 0)}/{t.get('C', 0)} |")
+    return "\n".join(lines) + "\n"
+
+
+def cmd_grid(args: argparse.Namespace) -> int:
+    import logging
+    from datetime import datetime
+
+    import i2r.evidence as evidence_module
+    from i2r import runio
+
+    cases_dir = Path(args.cases).resolve()
+    manifest = read_json(cases_dir / "manifest.json")
+    require_keys(manifest, ("structure_id", "base_run", "cases"), str(cases_dir / "manifest.json"))
+    structure_id = manifest["structure_id"]
+    base_cfg, sdir, _ = runio.effective_config(args.config, structure_id)
+    grid = parse_grid(args.grid)
+    points = grid_points(grid)
+    for settings in points:  # fail before any work if a key does not exist
+        for key, value in settings.items():
+            set_dotted(base_cfg, key, value)
+    real_seed = Path(args.real_run).resolve() if args.real_run else runio.REPO_ROOT / manifest["base_run"]
+    gts = [read_json(cases_dir / c["case_id"] / "ground_truth.json") for c in manifest["cases"]]
+    out_dir = cases_dir / f"grid_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    out_dir.mkdir()
+    seed_dir = out_dir / "_real_seed"
+    seed_dir.mkdir()
+    shutil.copy2(real_seed / "elements.json", seed_dir / "elements.json")
+    shutil.copytree(real_seed / "element_masks", seed_dir / "element_masks")
+
+    _SharedEmbedder.inner = evidence_module.Dinov2Embedder(base_cfg["evidence"], logging.getLogger("i2r.grid"))
+    original_class = evidence_module.Dinov2Embedder
+    evidence_module.Dinov2Embedder = _SharedEmbedder
+    results = []
+    try:
+        for number, settings in enumerate(points, start=1):
+            cfg = base_cfg
+            for key, value in settings.items():
+                cfg = set_dotted(cfg, key, value)
+            label = f"p{number:02d}"
+            point_dir = out_dir / label
+            point_dir.mkdir()
+            print(f"[grid] {label} ({number}/{len(points)}): {settings}", flush=True)
+            rows = []
+            for gt in gts:
+                case_dir = cases_dir / gt["case_id"]
+                run_dir = point_dir / gt["case_id"]
+                status = run_steps(case_dir / "seed", case_dir, run_dir, cfg, structure_id, GRID_STEPS,
+                                   f"grid/{label}/{gt['case_id']}")
+                if status != "completed":
+                    raise ContractError(f"{label} {gt['case_id']}: {status}")
+                rows.append(grid_case_row(gt, read_json(run_dir / "evidence.json")["targets"], cfg["synthetic"]))
+                if not args.keep_runs:
+                    shutil.rmtree(run_dir)
+            real_dir = point_dir / "real"
+            status = run_steps(seed_dir, sdir, real_dir, cfg, structure_id, GRID_STEPS, f"grid/{label}/real")
+            if status != "completed":
+                raise ContractError(f"{label} real damage: {status}")
+            ev = read_json(real_dir / "evidence.json")
+            real = {"by_tier": ev["summary"]["by_tier"],
+                    "ab_targets": [{"element_id": r.get("element_id"), "class": r["class"], "tier": r["tier"],
+                                    "rule": r.get("rule"), "donor_id": r["donor_id"],
+                                    "similarity": r.get("similarity"), "target_box": r["target_box"]}
+                                   for r in ev["targets"] if r["tier"] in ("A", "B")]}
+            results.append({"label": label, "settings": settings, "summary": grid_summary(rows, real), "rows": rows})
+    finally:
+        evidence_module.Dinov2Embedder = original_class
+        _SharedEmbedder.inner.close()
+        _SharedEmbedder.inner = None
+        shutil.rmtree(seed_dir, ignore_errors=True)
+
+    git = runio.git_commit()
+    header = {"cases": runio.relative(cases_dir), "n_cases": len(gts), "real_seed": runio.relative(real_seed),
+              "config": runio.relative(Path(args.config)),
+              "git": f"{(git['hash'] or '?')[:7]}{' (dirty)' if git['dirty'] else ''}", "grid": dict(grid)}
+    table = grid_markdown(results, header)
+    (out_dir / "grid.md").write_text(table, encoding="utf-8")
+    runio.write_json(out_dir / "grid.json", {"header": header, "points": results})
+    print(table)
+    print(f"[grid] written to {runio.relative(out_dir)}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="ImageToRender evaluation")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -585,6 +786,14 @@ def main(argv: list[str] | None = None) -> int:
     com.add_argument("--only", default="", help="comma-separated case ids (quick checks)")
     com.add_argument("--no-perceptual", action="store_true", help="skip the DINOv2 perceptual distance")
     com.set_defaults(func=cmd_completion)
+    grd = sub.add_parser("grid", help="vary thresholds over synthetic cases and real damage (T20)")
+    grd.add_argument("--cases", required=True, help="folder made by tools/synthetic_damage.py")
+    grd.add_argument("--grid", action="append", required=True, help="dotted.key=v1,v2,... (repeatable)")
+    grd.add_argument("--config", default=str(Path(__file__).resolve().parent.parent / "config.yaml"))
+    grd.add_argument("--real-run", default="", help="run whose inventory is used for the real damage "
+                                                   "(default: the cases' base run)")
+    grd.add_argument("--keep-runs", action="store_true", help="keep every case run folder (large)")
+    grd.set_defaults(func=cmd_grid)
     args = parser.parse_args(argv)
     try:
         return args.func(args)
