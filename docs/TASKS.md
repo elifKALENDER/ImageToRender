@@ -13,8 +13,8 @@
 - Do the tasks in order. Do not start a task until the previous one meets its acceptance criteria.
 - Work on a branch, never on `main`. The plan was `refactor/structure` for Phase 0 and `feat/pipeline`
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
-- **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: the fresh-clone
-  check passed; merging into `main` and the `v0.1.0` tag wait for the author.** Author decision
+- **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
+  fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
   skipped. Everything is developed, tuned and reported on s01 (n = 1 building). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
@@ -507,7 +507,8 @@ table, example images, install, the one-command demo, the results tables with n 
 **Accept.** Every path and command in the README exists and works. Example images total under 4 MB.
 
 ### T25. Fresh-clone check and tag
-*Status: clone check done 2026-11-12; merge and tag wait for the author. Cloned `refactor/structure`
+*Status: done 2026-11-12. The author decided to merge: `main` fast-forwarded to 9f463d0 and tagged `v0.1.0`
+(annotated, stating n = 1 and the limitations). Cloned `refactor/structure`
 (674a057) from GitHub into an empty folder. The existing conda env was used, not a new one (installing
 packages is not allowed here; `check_env.py` passed). 130 tests pass, 1 skipped (it needs the local
 expert inventory). Only `image.png` and `damage_mask.png` of s01 were copied in by hand (not in git, unknown

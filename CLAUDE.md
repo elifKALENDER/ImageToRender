@@ -18,7 +18,7 @@ support, never a restoration decision. The owner is an architect and writes in T
 - Tests: `python -m unittest discover tests` (GPU-free). Run them before every commit.
 
 ## Rules
-- Work on branch `refactor/structure` (the planned `feat/pipeline` branch was never created). Never commit to `main`. Commit and push only when asked or when the task list says so.
+- `main` is tagged `v0.1.0` (2026-11-12). New work goes on a new branch from `main` (`refactor/structure` held everything up to v0.1.0). Never commit to `main`; it is updated by merging, which the author decides. Commit and push only when asked or when the task list says so.
 - Commit message style: `feat(T12): ...` / `fix(T12b): ...`; end with the attribution line given by the session.
 - `archive/` is never edited and never imported; copy the function you need into `i2r/` or `tools/`.
 - No bare `except`. No hard-coded thresholds in modules; they go in `config.yaml`. A building-specific setting goes in `data/structures/<id>/structure.yaml` with the reason in a comment.
@@ -47,12 +47,12 @@ support, never a restoration decision. The owner is an architect and writes in T
 - T20 done (2026-11-12, `docs/rnd/RND-002-evidence-baseline.md`): `min_similarity` 0.80, `size_tolerance` 0.35, `row_tolerance` 0.15; s01 result unchanged; 4 of the 10 Stage 3C-C hypotheses found. Grid: `python evaluation/evaluate.py grid --cases <cases> --grid key=v1,v2 ...` (about 1 minute per point).
 - T21 done (2026-11-12, `docs/rnd/RND-003-generative-fill.md`): one generation on s01, technically correct (3.3 GB, restoration byte-identical, only the open area changed) but not usable (invented frieze and portal, melted bases, seams); `first_construction.generative` stays false. Models come from `models.cache_dir` (`F:/huggingface/hub`), never downloaded during a run.
 - T24 done (2026-11-12): README rewritten (English, Turkish summary, n = 1 results, limitations); no example images because the test photographs have no known licence.
-- T25 clone check done (2026-11-12): fresh clone of 674a057 reproduces the reference run byte for byte; every v1 item holds. Waiting for the author: merge `refactor/structure` into `main` and tag `v0.1.0`.
+- T25 done (2026-11-12): fresh clone reproduces the reference run byte for byte; `main` fast-forwarded and tagged `v0.1.0` (author decision). Local branch `backup-before-rewrite` deleted; its 3 commits are kept as the local tag `backup-before-rewrite` (not pushed). Further work goes on a new branch from `main`.
 - Known weaknesses (after T20): alignment scale hits the search bounds; low NCC on pilasters; the size filter blocks `recovered_pilaster_046`, `recovered_pilaster_020` and, in the synthetic test, `recovered_arch_025` and `expert_cornice_021`; `min_similarity` cannot be tested without negatives (R-002a); the two B1 slots (x 343-366, 400-423) are doubtful and B1 made a slot on plain wall in `background__bg01`.
 - Scale test (2026-11-12): `s01_test_church_upscaled` (Upscayl 3x, AI upscaler, not a new photo; see its `SOURCE.md`) showed that pixel settings did not follow image size; fixed the same day by `scale` in `config.yaml` (`runio.apply_pixel_scale`, reference 904 px; s01 outputs byte-identical). After the fix the copy gives the same targets, tiers and markings as s01; only 2 of 5 donors differ (upscaler texture). Not usable for calibration.
 
 ## Open author items
-- Building identity/source/licence and larger copies of both photos (the author has found more photos of s01, not added yet: R5 in `docs/TASKS.md`); merge into `main`; deleting local branch `backup-before-rewrite`; redraw the s01 mask edge near `pilaster_010`/`pilaster_011` (mask v3 is provisional); confirm opening → window.
+- Building identity/source/licence and larger copies of both photos (the author has found more photos of s01, not added yet: R5 in `docs/TASKS.md`); redraw the s01 mask edge near `pilaster_010`/`pilaster_011` (mask v3 is provisional); confirm opening → window.
 - Decision 2026-11-10: work on s01 only until the pipeline is complete; s02 gets its own later session.
   **Changed 2026-11-12** (after the roadmap check): T19 on s01, then a second structure under T22 rules
   (no code or config change, every correction logged) **before** T20, so thresholds are not tuned on one
