@@ -129,3 +129,44 @@ class StructureConfigTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PixelScaleTest(unittest.TestCase):
+    def cfg(self) -> dict:
+        return {
+            "scale": {"reference_long_side_px": 100, "length_keys": ["a.len", "a.size", "a.ts", "a.zero"],
+                      "area_keys": ["b.area"]},
+            "a": {"len": 2, "size": [10, 20], "ts": 1.0, "zero": 0, "other": 5},
+            "b": {"area": 64},
+        }
+
+    def test_lengths_scale_linearly_and_areas_squared(self) -> None:
+        out = runio.apply_pixel_scale(self.cfg(), 300)
+        self.assertEqual(out["a"], {"len": 6, "size": [30, 60], "ts": 3.0, "zero": 0, "other": 5})
+        self.assertEqual(out["b"]["area"], 576)
+        self.assertEqual(out["scale"]["applied"]["factor"], 3.0)
+        self.assertEqual(out["scale"]["applied"]["values"]["b.area"], [64, 576])
+
+    def test_reference_size_changes_nothing_and_input_is_not_modified(self) -> None:
+        cfg = self.cfg()
+        out = runio.apply_pixel_scale(cfg, 100)
+        self.assertEqual(out["a"], cfg["a"])
+        self.assertNotIn("applied", cfg["scale"])
+
+    def test_small_image_keeps_integers_at_least_one(self) -> None:
+        self.assertEqual(runio.apply_pixel_scale(self.cfg(), 10)["a"]["len"], 1)
+
+    def test_double_application_and_unknown_key_are_errors(self) -> None:
+        out = runio.apply_pixel_scale(self.cfg(), 300)
+        with self.assertRaises(ContractError):
+            runio.apply_pixel_scale(out, 300)
+        bad = self.cfg()
+        bad["scale"]["length_keys"].append("a.missing")
+        with self.assertRaises(ContractError):
+            runio.apply_pixel_scale(bad, 300)
+
+    def test_every_listed_key_exists_in_config_yaml(self) -> None:
+        cfg = runio.load_config()
+        out = runio.apply_pixel_scale(cfg, int(cfg["scale"]["reference_long_side_px"]))
+        for dotted, (old, new) in out["scale"]["applied"]["values"].items():
+            self.assertEqual(old, new, dotted)  # the reference size leaves every value as it is

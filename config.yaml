@@ -7,8 +7,32 @@
 # keys that differ). Each run writes the merged, effective settings into its run folder as
 # config.yaml, so results stay reproducible.
 
+scale:
+  # Pixel settings follow the image size (i2r/runio.py apply_pixel_scale). The values in this file were
+  # set on s01 (628 x 904); for an image with long side L every key below is multiplied by
+  # f = L / reference_long_side_px (lengths) or f^2 (areas), integers rounded, never below 1 unless 0.
+  # The scaled values, f and the originals are written into each run's config.yaml under scale.applied.
+  # Not scaled: detect (tiles are fractions of the image; min_tile_px is a model input size) and the
+  # mask editor window.
+  reference_long_side_px: 904
+  length_keys:
+    - damage.cut_margin_px
+    - complete.feather_px
+    - restoration.outline_px
+    - restoration.hatch_spacing_px
+    - restoration.hatch_width_px
+    - restoration.hatch_width_b_px
+    - restoration.text_scale
+    - synthetic.full_margin_px
+    - synthetic.background_size_px
+    - synthetic.background_clearance_px
+    - synthetic.background_grid_px
+  area_keys:
+    - damage.min_region_px
+    - complete.refine_min_visible_px
+
 paths:
-  data_root: data/structures       # one folder per building: image.png, damage_mask.png, SOURCE.md
+  data_root: data/structures      # one folder per building: image.png, damage_mask.png, SOURCE.md
   output_root: outputs             # runs go to outputs/<structure_id>/<timestamp>/
   image_file: image.png
   damage_mask_file: damage_mask.png
@@ -181,6 +205,9 @@ restoration:
   outline_px: 1
   outline_color: [255, 255, 255]
   hatch_spacing_px: 8
+  hatch_width_px: 1                 # tier C hatch line width
+  hatch_width_b_px: 2               # tier B hatch: wider, so it reads over dark interiors and differs from C
+  text_scale: 1.0                   # OpenCV font scale factor for labels, legend and bar (scaled with the image)
   hatch_color: [220, 60, 60]        # tier C: no evidence
   hatch_color_b: [90, 180, 255]     # tier B when not restored: position implied (light blue, reads on dark)
   label: "AI proposal, not a restoration decision"

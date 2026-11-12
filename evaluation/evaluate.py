@@ -13,8 +13,8 @@ per-class recall, precision and mean box IoU of matched pairs.
 `completion` runs the pipeline from the damage step (no review, both views) on every case made by
 tools/synthetic_damage.py and computes the §7.1 metrics. The steps run in this process (the same
 run_step functions run.py calls), one run folder per case under ``<cases>/eval_<timestamp>/``, with the
-current config.yaml plus the structure's structure.yaml. Writes ``completion.csv`` and
-``completion.md`` there. Definitions used (§7.1, made computable):
+current config.yaml plus the structure's structure.yaml, pixel settings scaled to the image. Writes
+``completion.csv`` and ``completion.md`` there. Definitions used (§7.1, made computable):
     recovered     partial/full: a tier A or B target of the hidden element's class with box IoU >=
                   synthetic.recovery_iou against the element's box (a tier C record does not count)
     tier          partial/full: tier of that best-IoU same-class target, else "C"; background: "A"/"B"
@@ -531,9 +531,7 @@ def cmd_completion(args: argparse.Namespace) -> int:
     manifest = read_json(cases_dir / "manifest.json")
     require_keys(manifest, ("structure_id", "base_run", "cases"), str(cases_dir / "manifest.json"))
     structure_id = manifest["structure_id"]
-    cfg = runio.load_config(args.config)
-    sdir = runio.structure_dir(cfg, structure_id)
-    cfg, _ = runio.apply_structure_config(cfg, sdir)
+    cfg, sdir, _ = runio.effective_config(args.config, structure_id)
     scfg = cfg["synthetic"]
     original = np.asarray(Image.open(sdir / cfg["paths"]["image_file"]).convert("RGB"))
     only = {c.strip() for c in args.only.split(",") if c.strip()} if args.only else None

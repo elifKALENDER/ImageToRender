@@ -248,9 +248,7 @@ def main(argv: list[str] | None = None) -> int:
         run_dir = Path(args.run).resolve()
         doc = load_elements(run_dir)
         structure_id = doc["structure_id"]
-        cfg = runio.load_config(args.config)
-        sdir = runio.structure_dir(cfg, structure_id)
-        cfg, _ = runio.apply_structure_config(cfg, sdir)
+        cfg, sdir, _ = runio.effective_config(args.config, structure_id)
         scfg = cfg["synthetic"]
         mask_path = run_dir / "damage_mask.png"
         if not mask_path.is_file():

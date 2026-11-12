@@ -94,6 +94,61 @@ def apply_structure_config(cfg: dict[str, Any], folder: Path) -> tuple[dict[str,
     return deep_merge(cfg, override), override
 
 
+def apply_pixel_scale(cfg: dict[str, Any], long_side: int) -> dict[str, Any]:
+    """Return ``cfg`` with the pixel settings listed in ``scale`` scaled to an image whose long side is
+    ``long_side`` (config.yaml, section ``scale``). Lengths are multiplied by f = long_side / reference,
+    areas by f^2; integers are rounded and kept >= 1 unless they are 0; lists are scaled element-wise.
+    Records f and every original value under ``scale.applied``. Applying it twice is an error."""
+    require_keys(cfg, ("scale",), "config")
+    scfg = cfg["scale"]
+    require_keys(scfg, ("reference_long_side_px", "length_keys", "area_keys"), "config: scale")
+    if "applied" in scfg:
+        raise ContractError("config: pixel scale already applied (scale.applied exists); use the main config.yaml")
+    factor = float(long_side) / float(scfg["reference_long_side_px"])
+    out = deep_merge(cfg, {})
+    out["scale"] = dict(scfg)
+    changed: dict[str, list[Any]] = {}
+
+    def scaled(value: Any, power: int) -> Any:
+        if isinstance(value, list):
+            return [scaled(v, power) for v in value]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ContractError(f"config: scale applies to numbers only, found {value!r}")
+        new = value * factor ** power
+        if isinstance(value, int):
+            return 0 if value == 0 else max(1, int(round(new)))
+        return round(new, 4)
+
+    for power, keys in ((1, scfg["length_keys"]), (2, scfg["area_keys"])):
+        for dotted in keys:
+            section, _, key = str(dotted).partition(".")
+            if section not in out or not isinstance(out[section], dict) or key not in out[section]:
+                raise ContractError(f"config: scale lists {dotted!r}, which is not a setting")
+            out[section] = dict(out[section])
+            old = out[section][key]
+            out[section][key] = scaled(old, power)
+            changed[dotted] = [old, out[section][key]]
+    out["scale"]["applied"] = {"image_long_side_px": int(long_side), "factor": round(factor, 4), "values": changed}
+    return out
+
+
+def effective_config(config_path: Path | str, structure_id: str) -> tuple[dict[str, Any], Path, dict[str, Any]]:
+    """Main config + the building's structure.yaml + pixel scaling for its image.
+
+    Returns (config, structure folder, structure overrides). Used by run.py and the tools, so a run, a
+    synthetic case and an evaluation see the same settings."""
+    cfg = load_config(config_path)
+    sdir = structure_dir(cfg, structure_id)
+    cfg, overrides = apply_structure_config(cfg, sdir)
+    image = sdir / cfg["paths"]["image_file"]
+    if image.is_file():
+        from PIL import Image
+
+        with Image.open(image) as im:
+            cfg = apply_pixel_scale(cfg, max(im.size))
+    return cfg, sdir, overrides
+
+
 # ---------------------------------------------------------------------------
 # JSON
 # ---------------------------------------------------------------------------
@@ -177,9 +232,7 @@ def create_run(
     later steps can start from them (``run.py --from``).
     """
     config_path = Path(config_path)
-    cfg = load_config(config_path)
-    sdir = structure_dir(cfg, structure_id)
-    cfg, overrides = apply_structure_config(cfg, sdir)
+    cfg, sdir, overrides = effective_config(config_path, structure_id)
 
     runs_root = structure_runs_root(cfg, structure_id)
     runs_root.mkdir(parents=True, exist_ok=True)
@@ -215,6 +268,7 @@ def create_run(
         "resumed_from": relative(resume_from) if resume_from else None,
         "config_file": relative(config_path),
         "structure_overrides": overrides,
+        "pixel_scale": cfg.get("scale", {}).get("applied"),
         "steps": {},
         "environment": environment_info(),
         "git_commit": git_commit(),

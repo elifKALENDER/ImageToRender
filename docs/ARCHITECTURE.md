@@ -126,13 +126,17 @@ python run.py --structure <id> --no-review        # non-interactive, for tests a
 Each run writes `outputs/<structure_id>/<timestamp>/` holding every intermediate file, a copy of the
 config used, and `run_meta.json` (interpreter path, package versions, git commit).
 
-**Settings file.** One `config.yaml`. Sections: `paths`, `classes` (name and text prompts for each),
+**Settings file.** One `config.yaml`. Sections: `scale` (which pixel settings follow the image size),
+`paths`, `classes` (name and text prompts for each),
 `detect` (scales, score thresholds), `review` (confidence threshold), `editor` (class map for old
 inventories), `refine_masks` (SAM masks for editor boxes), `damage` (overlap and cut thresholds),
 `mask_editor` and `mask_proposal` (drawing tool and its dark-region proposal), `evidence` (similarity
 threshold, tier B switches), `complete` (alignment search, colour match, feather), `restoration` (tone
-shift, outline, hatch), `first_construction` (inpaint strength, steps, prompt), `models` (model IDs).
-No threshold is hard-coded in a module. A building may override any value in
+shift, outline, hatch, text size), `synthetic` (synthetic damage test, §7.1), `first_construction`
+(inpaint strength, steps, prompt), `models` (model IDs).
+No threshold is hard-coded in a module. Pixel settings (lengths and areas) were set on a 904 px image;
+`runio.apply_pixel_scale` multiplies those listed in `scale` by the image's long side / 904 (areas by
+the square) before any step reads them, so a 4000 px photograph gets proportional values. A building may override any value in
 `data/structures/<id>/structure.yaml` (only the keys that differ, with the reason in a comment); the
 merged settings are copied into the run folder.
 

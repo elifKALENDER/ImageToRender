@@ -65,22 +65,30 @@ def inner_outline(region: np.ndarray, px: int) -> np.ndarray:
     return region & (eroded == 0)
 
 
-def put_label(layer: np.ndarray, text: str, region: np.ndarray, colour: tuple[int, int, int]) -> bool:
+def text_thickness(ts: float) -> int:
+    return max(1, int(round(ts)))
+
+
+def put_label(layer: np.ndarray, text: str, region: np.ndarray, colour: tuple[int, int, int],
+              ts: float = 1.0) -> bool:
     """Text on a dark band at the point of ``region`` farthest from its edge, only when the whole band
-    lies inside ``region`` (a label is never cut by the mask). Returns whether it was drawn."""
-    scale = 0.38
-    (tw, th), _ = cv2.getTextSize(text, FONT, scale, 1)
+    lies inside ``region`` (a label is never cut by the mask). Returns whether it was drawn.
+    ``ts`` is restoration.text_scale (scaled with the image)."""
+    scale = 0.38 * ts
+    thick = text_thickness(ts)
+    pad = max(3, int(round(4 * ts)))
+    (tw, th), _ = cv2.getTextSize(text, FONT, scale, thick)
     if not region.any():
         return False
     dist = cv2.distanceTransform(region.astype(np.uint8), cv2.DIST_L2, 3)
     cy, cx = np.unravel_index(int(np.argmax(dist)), dist.shape)
-    x1, y1 = cx - tw // 2 - 3, cy - th // 2 - 4
-    x2, y2 = cx + tw // 2 + 3, cy + th // 2 + 4
+    x1, y1 = cx - tw // 2 - pad + 1, cy - th // 2 - pad
+    x2, y2 = cx + tw // 2 + pad - 1, cy + th // 2 + pad
     h, w = region.shape
     if x1 < 0 or y1 < 0 or x2 >= w or y2 >= h or not region[y1:y2 + 1, x1:x2 + 1].all():
         return False
     cv2.rectangle(layer, (x1, y1), (x2, y2), (25, 25, 25), -1)
-    cv2.putText(layer, text, (cx - tw // 2, cy + th // 2), FONT, scale, colour, 1, cv2.LINE_AA)
+    cv2.putText(layer, text, (cx - tw // 2, cy + th // 2), FONT, scale, colour, thick, cv2.LINE_AA)
     return True
 
 
@@ -108,10 +116,11 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
     open_b &= damage_b & ~changed
     open_c = damage_b & ~changed & ~open_b
     spacing = int(rcfg["hatch_spacing_px"])
-    # tier B: opposite diagonal, two pixels wide, so it reads over dark interiors and differs from C
-    b_lines = hatch_pattern(damage.shape[::-1], spacing, width=2).T[:, ::-1]
+    # tier B: opposite diagonal, wider lines, so it reads over dark interiors and differs from C
+    b_lines = hatch_pattern(damage.shape[::-1], spacing, width=int(rcfg["hatch_width_b_px"])).T[:, ::-1]
     layer[open_b & b_lines] = rcfg["hatch_color_b"]
-    layer[open_c & hatch_pattern(damage.shape, spacing, offset=spacing // 2)] = rcfg["hatch_color"]
+    layer[open_c & hatch_pattern(damage.shape, spacing, offset=spacing // 2,
+                                 width=int(rcfg["hatch_width_px"]))] = rcfg["hatch_color"]
 
     layer = np.clip(layer, 0, 255).astype(np.uint8)
     labelled = 0
@@ -120,9 +129,9 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
         in_box = np.zeros_like(damage_b)
         in_box[y1:y2, x1:x2] = True
         if r["tier"] == "B" and statuses.get(r["target_id"]) != "completed":
-            labelled += put_label(layer, "B: implied", open_b & in_box, (255, 255, 255))
+            labelled += put_label(layer, "B: implied", open_b & in_box, (255, 255, 255), float(rcfg["text_scale"]))
         elif r["kind"] == "uncovered_region":
-            labelled += put_label(layer, "no evidence", open_c & in_box, (255, 255, 255))
+            labelled += put_label(layer, "no evidence", open_c & in_box, (255, 255, 255), float(rcfg["text_scale"]))
 
     out = completed.copy()
     out[damage_b] = layer[damage_b]          # markings live inside the damage mask only
@@ -133,7 +142,7 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
 
 
 def source_map(photo: np.ndarray, labels: np.ndarray, label_targets: dict[str, dict],
-               generative_label: int | None = None) -> np.ndarray:
+               generative_label: int | None = None, ts: float = 1.0) -> np.ndarray:
     """Faded grey photograph; changed pixels coloured by tier (method donor_transfer); target IDs."""
     g = cv2.cvtColor(photo, cv2.COLOR_RGB2GRAY).astype(np.float32)
     out = np.repeat((g * 0.45 + 120)[..., None], 3, axis=2).astype(np.uint8)
@@ -143,24 +152,24 @@ def source_map(photo: np.ndarray, labels: np.ndarray, label_targets: dict[str, d
             continue
         out[sel] = TIER_COLOUR[record["tier"]]
         ys, xs = np.nonzero(sel)
-        cv2.putText(out, record["target_id"], (int(xs.min()), max(10, int(ys.min()) - 2)), FONT, 0.33,
-                    (20, 20, 20), 1, cv2.LINE_AA)
+        cv2.putText(out, record["target_id"], (int(xs.min()), max(int(10 * ts), int(ys.min()) - 2)), FONT,
+                    0.33 * ts, (20, 20, 20), text_thickness(ts), cv2.LINE_AA)
     return out
 
 
-def targets_overlay(photo: np.ndarray, elements: list[dict], records: list[dict]) -> np.ndarray:
+def targets_overlay(photo: np.ndarray, elements: list[dict], records: list[dict], ts: float = 1.0) -> np.ndarray:
     out = photo.copy()
     for e in elements:
         if e.get("rejected"):
             continue
         x1, y1, x2, y2 = e["box"]
-        cv2.rectangle(out, (x1, y1), (x2 - 1, y2 - 1), class_color(e["class"]), 1, cv2.LINE_AA)
+        cv2.rectangle(out, (x1, y1), (x2 - 1, y2 - 1), class_color(e["class"]), text_thickness(ts), cv2.LINE_AA)
     for r in records:
         x1, y1, x2, y2 = r["target_box"]
         colour = TIER_COLOUR[r["tier"]]
-        cv2.rectangle(out, (x1, y1), (x2 - 1, y2 - 1), colour, 2, cv2.LINE_AA)
-        cv2.putText(out, f"{r['target_id']} {r.get('rule') or r['tier']}", (x1 + 2, max(10, y1 - 3)), FONT, 0.33,
-                    colour, 1, cv2.LINE_AA)
+        cv2.rectangle(out, (x1, y1), (x2 - 1, y2 - 1), colour, 2 * text_thickness(ts), cv2.LINE_AA)
+        cv2.putText(out, f"{r['target_id']} {r.get('rule') or r['tier']}", (x1 + 2, max(int(10 * ts), y1 - 3)), FONT,
+                    0.33 * ts, colour, text_thickness(ts), cv2.LINE_AA)
     return out
 
 
@@ -172,24 +181,30 @@ SOURCE_MAP_LEGEND = [
 
 
 def bar(width: int, rcfg: dict, view: str | None, items: list | None = None) -> np.ndarray:
-    """Label and legend strip placed under every image."""
-    out = np.full((22 + 20 * 4, width, 3), 20, np.uint8)     # room for up to four legend lines
+    """Label and legend strip placed under every image (sizes follow restoration.text_scale)."""
+    ts = float(rcfg["text_scale"])
+    thick = text_thickness(ts)
+
+    def u(v: float) -> int:
+        return int(round(v * ts))
+
+    out = np.full((u(22) + u(20) * 4, width, 3), 20, np.uint8)     # room for up to four legend lines
     title = rcfg["label"] + (f" | {view.replace('_', ' ')} view" if view else "")
-    cv2.putText(out, title, (6, 16), FONT, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(out, title, (u(6), u(16)), FONT, 0.45 * ts, (255, 255, 255), thick, cv2.LINE_AA)
     items = items or [
         ((240, 240, 240), "completed from a donor (outlined)"),
         (tuple(rcfg["hatch_color_b"]), "hatched: B, position implied, not restored"),
         (tuple(rcfg["hatch_color"]), "hatched: no evidence"),
     ]
-    x, y = 6, 32
+    x, y = u(6), u(32)
     for colour, text in items:
-        (tw, _), _ = cv2.getTextSize(text, FONT, 0.36, 1)
-        if x + 16 + tw > width - 4:
-            x, y = 6, y + 20
-        cv2.rectangle(out, (x, y), (x + 10, y + 10), colour, -1)
-        cv2.putText(out, text, (x + 14, y + 9), FONT, 0.36, (220, 220, 220), 1, cv2.LINE_AA)
-        x += 24 + tw
-    return out[: max(y + 16, 40)]
+        (tw, _), _ = cv2.getTextSize(text, FONT, 0.36 * ts, thick)
+        if x + u(16) + tw > width - 4:
+            x, y = u(6), y + u(20)
+        cv2.rectangle(out, (x, y), (x + u(10), y + u(10)), colour, -1)
+        cv2.putText(out, text, (x + u(14), y + u(9)), FONT, 0.36 * ts, (220, 220, 220), thick, cv2.LINE_AA)
+        x += u(24) + tw
+    return out[: max(y + u(16), u(40))]
 
 
 CONJECTURE_COLOUR = (200, 60, 200)
@@ -223,10 +238,10 @@ def conjecture_overlay(photo: np.ndarray, damage: np.ndarray, labels: np.ndarray
     out[generative] = CONJECTURE_COLOUR
     open_damage = (damage > 0) & (labels == 0)
     spacing = int(rcfg["hatch_spacing_px"])
-    out[open_damage & hatch_pattern(damage.shape, spacing)] = rcfg["hatch_color"]
+    out[open_damage & hatch_pattern(damage.shape, spacing, width=int(rcfg["hatch_width_px"]))] = rcfg["hatch_color"]
     n = int(generative.sum())
     if n == 0:
-        put_label(out, "no generative fill", open_damage, (255, 255, 255))
+        put_label(out, "no generative fill", open_damage, (255, 255, 255), float(rcfg["text_scale"]))
     return out, n
 
 
@@ -321,7 +336,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         marked, counts = mark_view(completed, damage, labels, records, statuses, rcfg)
         Image.fromarray(with_bar(marked, rcfg, view, view_legend(rcfg, counts))).save(run.path(f"{view}.png"))
         label_targets = {k: by_id[v] for k, v in report["labels"].items()}
-        Image.fromarray(with_bar(source_map(photo, labels, label_targets), rcfg, view,
+        Image.fromarray(with_bar(source_map(photo, labels, label_targets, ts=float(rcfg["text_scale"])), rcfg, view,
                                         SOURCE_MAP_LEGEND)).save(
             run.path(f"{view}_source_map.png"))
         if view == "first_construction":
@@ -348,7 +363,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         "method_values": ["donor_transfer", "generative", "none"],
         "targets": entries,
     })
-    Image.fromarray(with_bar(targets_overlay(photo, elements, records), rcfg, None)).save(run.path(OVERLAY))
+    Image.fromarray(with_bar(targets_overlay(photo, elements, records, float(rcfg["text_scale"])), rcfg, None)).save(run.path(OVERLAY))
     Image.fromarray(bar(photo.shape[1], rcfg, None)).save(run.path(LEGEND))
     summary = {v: sum(1 for e in entries if e["views"].get(v) == "completed") for v in rendered}
     log.info("[render] provenance.json: %d target(s); completed per view: %s", len(entries), summary)
