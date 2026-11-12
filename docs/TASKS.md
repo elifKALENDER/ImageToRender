@@ -12,7 +12,8 @@
 - Do the tasks in order. Do not start a task until the previous one meets its acceptance criteria.
 - Work on a branch, never on `main`. The plan was `refactor/structure` for Phase 0 and `feat/pipeline`
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
-- **Status (2026-11-12): T01 to T18, T12b and T16b are done. The next task is T19.** T12 to T18 carry a
+- **Status (2026-11-12): T01 to T19, T12b and T16b are done. Next: a second structure under T22 rules,
+  then T20** (order changed on 2026-11-12, see `CLAUDE.md`; T22 needs the author's photograph and mask). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
   deviations worth recording (their commits are `chore(T01)` to `feat(T11)` in the git log).
 - **The environment is fixed.** Use the conda env `ImageToRender_GPU`. Do not install, upgrade or remove
@@ -114,7 +115,7 @@ version differs.
 
 ## Phase 1 — Pipeline, module by module
 
-*Status: T08 to T18 done (T08 to T11 without a note of their own). T19 to T21 open.*
+*Status: T08 to T19 done (T08 to T11 without a note of their own). T20 and T21 open.*
 
 ### T08. `config.yaml`, `i2r/runio.py`, `run.py` skeleton
 **What.** Create `config.yaml` with every section named in §3 and the initial values given in §5 (mark
@@ -400,6 +401,22 @@ and shown as such). Update `provenance.json` with the second view's status.
 **Accept.** `--view both` writes both images. The two images differ only where a tier B target exists.
 
 ### T19. Synthetic damage tool and evaluation
+*Status: done. Decisions: hidden pixels are added to the mask **and** painted black in the case image,
+otherwise an unfilled pixel would still show the original and score perfectly; the steps run in-process
+(same `run_step` functions as `run.py`, one run folder per case, current config); background uses 4 fixed
+rectangles inside the convex hull of the element boxes (the bounding box reached the rock beside the
+building); "recovered" requires a tier A or B target of the same class at box IoU >= 0.5 (a tier C
+record does not count). Settings: `synthetic` in `config.yaml`. Result on s01 (n = 1, thresholds still
+initial guesses; cases `outputs/synthetic/s01_test_church/20261112_122615`, evaluation `eval_20261112_122636`):
+28 cases (12 partial, 12 full, 4 background), none failed, preservation 0 in every row. Partial: 9 of 12
+tier A; the 3 misses have no usable donor (the only window; `expert_cornice_021`, size; `recovered_arch_025`,
+size). Full: 1 of 12 recovered (cornice by B2); as predicted, B1 only interpolates inside rows of at least
+3 and B2 mirrors at axis x=355 do not land on the hidden arches and pilasters, so the rest are tier C.
+Background: restoration left all 4 open (abstention 100 %), but one rectangle between the pilasters became a
+B1 pilaster slot and was filled in the first-construction view (a B1 false positive, for T20). Filled
+share of hidden pixels in partial cases is 48 % (SAM donor masks cover the element, not the wall in the
+band) and SSIM over the hidden pixels is low (0.13 R/F against 0.02 for leaving it open). Donor validity
+is for the author to judge; each case's donor is listed in `completion.md`.*
 **What.** `tools/synthetic_damage.py`: from a structure with an inventory, create case folders for the
 three variants in §7.1 (partial, full, background), each with a modified inventory, a modified mask and
 `ground_truth.json`. `evaluation/evaluate.py completion`: run the pipeline from the damage step on every
@@ -498,3 +515,4 @@ that case the first-construction view shows tier C regions as marked and unfille
 | R2 | Per-class recall of zero-shot detection on heritage facades, and how much expert correction it needs. | After T23 | Extends RND-001 |
 | R3 | Does synthetic-damage performance predict acceptance on real damage? | After 5 structures | New note |
 | R4 | Donor-only restoration view versus a harmonised image: which do experts prefer, and can they point to the additions? | After T21 | New note |
+| R5 | Several photographs of the same building (2026-11-12: the author found more photos of s01; none added yet). (a) A larger, near-frontal one could replace the 628 x 904 image (mask and inventory must be redrawn). (b) A consistency test: do two photos of one building give the same targets and tiers? (c) Cross-view evidence: a part lost in one photo but visible in another, or a twin on another facade, as a donor; needs view registration (§9 multi-image, perspective). Record each photo's date (damage changes over time) and licence. Does not replace a second building for T20. | When the author adds the photos | New note |

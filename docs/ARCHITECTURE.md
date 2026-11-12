@@ -103,7 +103,7 @@ ImageToRender/
 │   ├── editor_adapter.py      # elements.json <-> editor files (export, edit, import)
 │   ├── refine_masks.py        # SAM masks for box-only (editor) elements, written as a new run
 │   ├── check_env.py
-│   └── synthetic_damage.py    # T19, not written yet
+│   └── synthetic_damage.py    # T19: synthetic damage cases (§7.1)
 ├── evaluation/
 │   └── evaluate.py
 ├── data/structures/<id>/      # image.png, damage_mask.png, SOURCE.md, optional structure.yaml

@@ -185,8 +185,23 @@ restoration:
   hatch_color_b: [90, 180, 255]     # tier B when not restored: position implied (light blue, reads on dark)
   label: "AI proposal, not a restoration decision"
 
+synthetic:
+  # tools/synthetic_damage.py and `evaluation/evaluate.py completion` (docs/ARCHITECTURE.md §7.1, T19).
+  # Hidden pixels are added to the damage mask AND painted with hidden_fill in the case image, so a pixel
+  # the pipeline leaves open cannot score as if it had been recovered.
+  hidden_fill: [0, 0, 0]
+  partial_fraction: 0.50            # share of the element's box hidden (§7.1: 40 to 60 %) ...
+  partial_side: top                 # ... as a band from this side: top, bottom, left, right
+  full_margin_px: 4                 # full variant: whole box plus this margin
+  background_cases: 4               # fixed rectangles on plain wall, not one per element (credit cost)
+  background_size_px: [28, 48]      # width, height of each rectangle
+  background_clearance_px: 8        # distance to every element box and to the original damage
+  background_grid_px: 8             # candidate positions are searched on this grid
+  recovery_iou: 0.50                # §7.1: a target of the same class with box IoU >= this recovers the element
+  background_covered_share: 0.50    # a background rectangle counts as given tier A/B when an A/B box covers this share
+
 first_construction:
-  generative: false                 # tier C fill (T21); stays off unless it proves usable
+  generative: false                # tier C fill (T21); stays off unless it proves usable
   strength: 0.55
   steps: 30
   guidance_scale: 6.5
