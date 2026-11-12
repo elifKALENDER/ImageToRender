@@ -179,7 +179,7 @@ def build_views(width: int, height: int, damage: np.ndarray | None, dcfg: dict[s
             "expanded_damage_context",
         ))
 
-    side = max(192, min(int(round(min(width, height) * dcfg["tile_fraction_of_short_side"])), width, height))
+    side = max(int(dcfg["min_tile_px"]), min(int(round(min(width, height) * dcfg["tile_fraction_of_short_side"])), width, height))
     index = 0
     for y in evenly_spaced(height, side, dcfg["tile_overlap"]):
         for x in evenly_spaced(width, side, dcfg["tile_overlap"]):
@@ -188,7 +188,7 @@ def build_views(width: int, height: int, damage: np.ndarray | None, dcfg: dict[s
 
     unique: list[View] = []
     for view in views:
-        if all(box_iou(view.box, kept.box) < 0.92 for kept in unique):
+        if all(box_iou(view.box, kept.box) < float(dcfg["duplicate_view_iou"]) for kept in unique):
             unique.append(view)
     return unique[: max(1, int(dcfg["max_detection_views"]))]
 

@@ -5,7 +5,7 @@ Research/portfolio repo. Input: a photograph of a damaged historical building. O
 support, never a restoration decision. The owner is an architect and writes in Turkish.
 
 ## Read first
-- `docs/TASKS.md`: ordered task list; continue at the first task without a "Status: done" note (next: T19).
+- `docs/TASKS.md`: ordered task list; its "Before you start" section names the next task (T19).
 - `docs/ARCHITECTURE.md`: design (6 modules detect, review, damage, evidence, complete, render; evidence tiers A, B, C).
 - `docs/EXPERIMENTS.md`: what the old experiments were. `archive/README.md`: which run each archived script produced.
 
@@ -18,7 +18,7 @@ support, never a restoration decision. The owner is an architect and writes in T
 - Tests: `python -m unittest discover tests` (GPU-free). Run them before every commit.
 
 ## Rules
-- Work on branch `refactor/structure` (later `feat/pipeline`). Never commit to `main`. Commit and push only when asked or when the task list says so.
+- Work on branch `refactor/structure` (the planned `feat/pipeline` branch was never created). Never commit to `main`. Commit and push only when asked or when the task list says so.
 - Commit message style: `feat(T12): ...` / `fix(T12b): ...`; end with the attribution line given by the session.
 - `archive/` is never edited and never imported; copy the function you need into `i2r/` or `tools/`.
 - No bare `except`. No hard-coded thresholds in modules; they go in `config.yaml`. A building-specific setting goes in `data/structures/<id>/structure.yaml` with the reason in a comment.
@@ -37,7 +37,7 @@ support, never a restoration decision. The owner is an architect and writes in T
 
 ## Current state
 - Done: T1 to T18 plus T16b (detect OWL-ViT + SAM, review, editor adapter, mask editor, damage, evidence tiers A/B/C, donor transfer, restoration view, first-construction view, `tools/refine_masks.py`). All six `run.py` steps are real. 101 tests pass.
-- s01 (n = 1): damage mask version 3 (provisional, see `data/structures/s01_test_church/SOURCE.md`); damage labels agree with the expert on 23 of 23 elements; 19 targets (5 A, 2 B, 12 C). Restoration view completes 5 targets (4,971 px); first-construction view 7 targets (11,367 px); the two views differ only inside the B boxes. Recall of raw detections against the expert inventory: 52 % class-aware (RND-001).
+- s01 (n = 1): damage mask version 3 (provisional, see `data/structures/s01_test_church/SOURCE.md`); damage labels agree with the expert on 23 of 23 elements after two mask corrections made where they disagreed (19 of 23 with the author's first mask); 19 targets (5 A, 2 B, 12 C). Restoration view completes 5 targets (4,971 px); first-construction view 7 targets (11,367 px); the two views differ only inside the B boxes. Recall of raw detections against the expert inventory: 52 % class-aware (RND-001).
 - Reference runs: `outputs/s01_test_church/20261110_181914` (SAM-refined inventory, mask v3) and `outputs/s01_test_church/20261110_182638` (both views, latest). Develop from these, not from raw detections (oversized boxes).
 - Re-run: `python run.py --structure s01_test_church --from damage --view both --no-review`.
 

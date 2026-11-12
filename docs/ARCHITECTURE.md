@@ -101,11 +101,12 @@ ImageToRender/
 │   ├── mask_editor.py         # draw damage_mask.png
 │   ├── inventory_editor.py    # existing Tkinter editor, unchanged, for adding missed elements
 │   ├── editor_adapter.py      # elements.json <-> editor files (export, edit, import)
+│   ├── refine_masks.py        # SAM masks for box-only (editor) elements, written as a new run
 │   ├── check_env.py
-│   └── synthetic_damage.py
+│   └── synthetic_damage.py    # T19, not written yet
 ├── evaluation/
 │   └── evaluate.py
-├── data/structures/<id>/      # image.png, damage_mask.png, SOURCE.md
+├── data/structures/<id>/      # image.png, damage_mask.png, SOURCE.md, optional structure.yaml
 ├── tests/
 ├── docs/                      # EXPERIMENTS.md, ARCHITECTURE.md, TASKS.md, rnd/, examples/
 ├── setup/                     # unchanged
@@ -125,11 +126,15 @@ python run.py --structure <id> --no-review        # non-interactive, for tests a
 Each run writes `outputs/<structure_id>/<timestamp>/` holding every intermediate file, a copy of the
 config used, and `run_meta.json` (interpreter path, package versions, git commit).
 
-**Settings file.** One `config.yaml`. Sections: `classes` (name and text prompts for each), `detect`
-(scales, score thresholds), `review` (confidence threshold), `editor` (class map for old inventories), `damage` (overlap
-thresholds), `mask_editor` and `mask_proposal` (drawing tool and its dark-region proposal), `evidence`
-(similarity threshold, tier B switches), `restoration` (tone shift, outline, hatch), `first_construction`
-(inpaint strength, steps, prompt), `models` (model IDs). No threshold is hard-coded in a module.
+**Settings file.** One `config.yaml`. Sections: `paths`, `classes` (name and text prompts for each),
+`detect` (scales, score thresholds), `review` (confidence threshold), `editor` (class map for old
+inventories), `refine_masks` (SAM masks for editor boxes), `damage` (overlap and cut thresholds),
+`mask_editor` and `mask_proposal` (drawing tool and its dark-region proposal), `evidence` (similarity
+threshold, tier B switches), `complete` (alignment search, colour match, feather), `restoration` (tone
+shift, outline, hatch), `first_construction` (inpaint strength, steps, prompt), `models` (model IDs).
+No threshold is hard-coded in a module. A building may override any value in
+`data/structures/<id>/structure.yaml` (only the keys that differ, with the reason in a comment); the
+merged settings are copied into the run folder.
 
 ---
 
@@ -169,7 +174,10 @@ not edited and not imported. New modules never import from `archive/`.
 - **Element.** A detected or expert-added object with a class, a box and a mask.
 - **Intact element.** Its overlap with the damage mask is below `damage.intact_max_overlap` (initial
   value 0.05).
-- **Fragmented element.** Detected, but overlapping the damage mask, or cut by it.
+- **Fragmented element.** Detected, but overlapping the damage mask, or cut by it. "Cut" (added in
+  T16b) means: at least `damage.cut_min_contact` of the mask's edge lies within `damage.cut_margin_px`
+  of damage, and the element's box reaches into the damage by `intact_max_overlap`. It is needed for
+  masks that cover only the surviving part of an element.
 - **Damage region.** A connected component of the damage mask.
 - **Donor.** An intact element of the same class in the same photograph.
 - **Target.** A place where something is to be completed: a fragmented element, or an empty slot.
@@ -400,7 +408,7 @@ the donor-only restoration view or a harmonised one? How should "distinguishable
 | A paper | 12 to 15 | With a second expert rating a subset |
 
 Because nothing is trained, a small set is enough for this stage. One structure yields many synthetic
-cases (the test building has 11 intact elements).
+cases (the test building has 12 intact elements in the expert inventory).
 
 **Requirements per photograph.**
 

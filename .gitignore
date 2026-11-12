@@ -83,7 +83,6 @@ data/**
 !data/structures/
 !data/structures/*/
 !data/structures/*/SOURCE.md
-!data/structures/*/symmetry_axis.json
 !data/structures/*/structure.yaml
 datasets/
 mnist_data/

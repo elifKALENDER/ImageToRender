@@ -193,10 +193,22 @@ def bar(width: int, rcfg: dict, view: str | None, items: list | None = None) -> 
 
 
 CONJECTURE_COLOUR = (200, 60, 200)
-CONJECTURE_LEGEND = [
-    (CONJECTURE_COLOUR, "generative fill (conjecture)"),
-    ((220, 60, 60), "hatched: open, no evidence"),
-]
+
+
+def conjecture_legend(rcfg: dict) -> list:
+    return [
+        (CONJECTURE_COLOUR, "generative fill (conjecture)"),
+        (tuple(rcfg["hatch_color"]), "hatched: open, no evidence"),
+    ]
+
+
+def view_legend(rcfg: dict, counts: dict[str, int]) -> list:
+    """Legend of one marked view: only the markings that occur in it."""
+    items = [((240, 240, 240), "completed from a donor (outlined)")]
+    if counts["open_tier_b_px"]:
+        items.append((tuple(rcfg["hatch_color_b"]), "hatched: B, position implied, not restored"))
+    items.append((tuple(rcfg["hatch_color"]), "hatched: no evidence"))
+    return items
 
 
 def conjecture_overlay(photo: np.ndarray, damage: np.ndarray, labels: np.ndarray, report: dict,
@@ -307,14 +319,14 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
             raise ContractError(f"[render] {view}: {unexplained} changed pixel(s) have no source label")
         statuses = {e["target_id"]: e["status"] for e in report["targets"]}
         marked, counts = mark_view(completed, damage, labels, records, statuses, rcfg)
-        Image.fromarray(with_bar(marked, rcfg, view)).save(run.path(f"{view}.png"))
+        Image.fromarray(with_bar(marked, rcfg, view, view_legend(rcfg, counts))).save(run.path(f"{view}.png"))
         label_targets = {k: by_id[v] for k, v in report["labels"].items()}
         Image.fromarray(with_bar(source_map(photo, labels, label_targets), rcfg, view,
                                         SOURCE_MAP_LEGEND)).save(
             run.path(f"{view}_source_map.png"))
         if view == "first_construction":
             overlay, generative_px = conjecture_overlay(photo, damage, labels, report, rcfg)
-            Image.fromarray(with_bar(overlay, rcfg, view, CONJECTURE_LEGEND)).save(
+            Image.fromarray(with_bar(overlay, rcfg, view, conjecture_legend(rcfg))).save(
                 run.path("first_construction_conjecture_overlay.png"))
             counts["generative_px"] = generative_px
         rendered[view] = counts

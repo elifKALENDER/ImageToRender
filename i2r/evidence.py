@@ -313,12 +313,14 @@ def box_centre(box: list[int]) -> tuple[float, float]:
     return (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
 
 
-def box_from_centre(cx: float, cy: float, w: float, h: float, width: int, height: int) -> list[int] | None:
-    """Integer box clipped to the image; None when less than half of it lies inside."""
+def box_from_centre(cx: float, cy: float, w: float, h: float, width: int, height: int,
+                    min_inside: float) -> list[int] | None:
+    """Integer box clipped to the image; None when less than ``min_inside`` of its area lies inside
+    (``evidence.tier_b.slot_min_inside_image``)."""
     x1, y1, x2, y2 = cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2
     cx1, cy1 = max(0, int(round(x1))), max(0, int(round(y1)))
     cx2, cy2 = min(width, int(round(x2))), min(height, int(round(y2)))
-    if cx2 <= cx1 or cy2 <= cy1 or (cx2 - cx1) * (cy2 - cy1) < 0.5 * w * h:
+    if cx2 <= cx1 or cy2 <= cy1 or (cx2 - cx1) * (cy2 - cy1) < min_inside * w * h:
         return None
     return [cx1, cy1, cx2, cy2]
 
@@ -415,7 +417,7 @@ def tier_b1_rows(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[
             h = (box_size(left["box"])[1] + box_size(right["box"])[1]) / 2
             for j in range(1, k):
                 cx, cy = lx + (rx - lx) * j / k, ly + (ry - ly) * j / k
-                slot = box_from_centre(cx, cy, w, h, width, height)
+                slot = box_from_centre(cx, cy, w, h, width, height, float(bcfg["slot_min_inside_image"]))
                 if slot is None:
                     continue
                 if damage_share(slot, damage) < float(bcfg["slot_min_damage"]):
@@ -432,10 +434,10 @@ def tier_b1_rows(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[
     return targets, {"rows": rows_info}
 
 
-def mirror_box(box: list[int], axis_x: float, width: int, height: int) -> list[int] | None:
+def mirror_box(box: list[int], axis_x: float, width: int, height: int, min_inside: float) -> list[int] | None:
     w, h = box_size(box)
     cx, cy = box_centre(box)
-    return box_from_centre(2 * axis_x - cx, cy, w, h, width, height)
+    return box_from_centre(2 * axis_x - cx, cy, w, h, width, height, min_inside)
 
 
 def axis_agreement(axis_x: float, active: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[float, int]:
@@ -444,7 +446,7 @@ def axis_agreement(axis_x: float, active: list[dict], damage: np.ndarray, bcfg: 
     height, width = damage.shape
     checked = matched = 0
     for e in active:
-        m = mirror_box(e["box"], axis_x, width, height)
+        m = mirror_box(e["box"], axis_x, width, height, float(bcfg["slot_min_inside_image"]))
         if m is None or damage_share(m, damage) >= float(bcfg["slot_min_damage"]):
             continue
         checked += 1
@@ -500,8 +502,9 @@ def tier_b2_symmetry(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tu
     for e in active:
         if e["damage_status"] != "intact":
             continue
-        m = mirror_box(e["box"], axis["axis_x"], width, height)
-        if m is None or iou(m, e["box"]) > 0.5:      # off the image, or the element sits on the axis
+        m = mirror_box(e["box"], axis["axis_x"], width, height, float(bcfg["slot_min_inside_image"]))
+        # off the image, or the element sits on the axis
+        if m is None or iou(m, e["box"]) > float(bcfg["on_axis_iou"]):
             continue
         if damage_share(m, damage) < float(bcfg["slot_min_damage"]):
             continue
@@ -531,7 +534,7 @@ TIER_B_RULES: dict[str, tuple[str, Callable[[list[dict], np.ndarray, dict], tupl
 
 
 def find_tier_b(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[list[dict], dict]:
-    """Run the enabled rules; when two implied slots of the same class overlap (IoU > 0.5) keep the one
+    """Run the enabled rules; when two implied slots of the same class overlap (IoU above ``same_slot_iou``) keep the one
     with the higher confidence and name the other rule in ``also_implied_by``."""
     found: list[dict] = []
     diagnostics: dict[str, Any] = {}
@@ -544,7 +547,8 @@ def find_tier_b(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[l
         found.extend(targets)
     kept: list[dict] = []
     for t in sorted(found, key=lambda t: -t["confidence"]):
-        twin = next((k for k in kept if k["class"] == t["class"] and iou(k["target_box"], t["target_box"]) > 0.5), None)
+        twin = next((k for k in kept if k["class"] == t["class"]
+                     and iou(k["target_box"], t["target_box"]) > float(bcfg["same_slot_iou"])), None)
         if twin is None:
             kept.append(t)
         else:

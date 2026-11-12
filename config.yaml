@@ -42,6 +42,8 @@ detect:
   damage_context_min_fraction: 0.48   # minimum side of that view, as a share of the short image side
   tile_fraction_of_short_side: 0.68
   tile_overlap: 0.38
+  min_tile_px: 192                    # a tile is never smaller than this (archived Stage 1 value)
+  duplicate_view_iou: 0.92            # a view overlapping an earlier one by this IoU or more is dropped (archived value)
   max_detection_views: 10
   # Per prompt: keep boxes with score >= max(absolute_score_floor, best_score * relative_score_ratio).
   absolute_score_floor: 0.008
@@ -148,6 +150,12 @@ evidence:
     slot_free_max_overlap: 0.30     # initial guess, calibrate in T20
     # B2: a mirrored element "matches" when its IoU with a same-class element reaches this.
     mirror_match_iou: 0.30          # initial guess, calibrate in T20
+    # An implied slot (B1) or mirrored box (B2) is dropped when less than this share of it lies in the image.
+    slot_min_inside_image: 0.50     # initial guess, calibrate in T20
+    # B2: an element whose mirror overlaps itself by more than this IoU sits on the axis and implies nothing.
+    on_axis_iou: 0.50               # initial guess, calibrate in T20
+    # Two implied slots of one class overlapping by more than this IoU are one slot (B1 and B2 agree).
+    same_slot_iou: 0.50             # initial guess, calibrate in T20
     # B2: an axis is scored only when at least this many elements can be checked against it.
     symmetry_min_elements: 4
     # B2: vertical axis x in image pixels, given by the author; null = estimate from the elements.

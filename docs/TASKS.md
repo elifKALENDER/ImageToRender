@@ -10,7 +10,11 @@
 - Read `docs/EXPERIMENTS.md` (what exists) and `docs/ARCHITECTURE.md` (what to build). Section numbers
   such as "§5.2" refer to `ARCHITECTURE.md`.
 - Do the tasks in order. Do not start a task until the previous one meets its acceptance criteria.
-- Work on a branch: `refactor/structure` for Phase 0, then `feat/pipeline`. Do not commit to `main`.
+- Work on a branch, never on `main`. The plan was `refactor/structure` for Phase 0 and `feat/pipeline`
+  after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
+- **Status (2026-11-12): T01 to T18, T12b and T16b are done. The next task is T19.** T12 to T18 carry a
+  "Status: done" note with decisions and results; T01 to T11 have none because they finished without
+  deviations worth recording (their commits are `chore(T01)` to `feat(T11)` in the git log).
 - **The environment is fixed.** Use the conda env `ImageToRender_GPU`. Do not install, upgrade or remove
   any package. If a task seems to need a new package, stop and ask.
 - **Archived files are never edited and never imported.** Copy the functions you need into the new
@@ -25,6 +29,8 @@
 ---
 
 ## Phase 0 — New structure and archive
+
+*Status: T01 to T07 done.*
 
 ### T01. Prepare `.gitignore` and the skeleton
 **What.** `.gitignore` currently ignores `archive/`, `data/` and `assets/`. Remove the `archive/` line.
@@ -107,6 +113,8 @@ version differs.
 ---
 
 ## Phase 1 — Pipeline, module by module
+
+*Status: T08 to T18 done (T08 to T11 without a note of their own). T19 to T21 open.*
 
 ### T08. `config.yaml`, `i2r/runio.py`, `run.py` skeleton
 **What.** Create `config.yaml` with every section named in §3 and the initial values given in §5 (mark
@@ -341,7 +349,9 @@ disagreements remain and are now explained by the drawn damage mask, not the box
 donor for the three pilasters left in tier C.
 Follow-up (author's decision, provisional until the author redraws the edge): mask version 3 removes the
 two pilasters' SAM masks, grown by 3 px, from the damage mask (841 px; building `SOURCE.md`). Run
-`outputs/s01_test_church/20261110_181914`: 23 of 23 labels agree with the expert; 19 targets (5 A, 2 B,
+`outputs/s01_test_church/20261110_181914`: 23 of 23 labels agree with the expert (19 of 23 with the
+author's first mask; versions 2 and 3 changed the mask where it disagreed with the expert, so 23 of 23
+is the result of those corrections, not an independent measurement); 19 targets (5 A, 2 B,
 12 C); `pilaster_013` becomes tier A from `pilaster_010`; `recovered_pilaster_046` and `_020` stay tier C
 on the size filter (donors 22-23 px wide against 25-26 px); 5 of 5 tier A completed, 4,971 pixels.
 **Use run `20261110_181914` (or later) from now on.***
