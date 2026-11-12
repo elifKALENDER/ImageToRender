@@ -14,7 +14,9 @@
 - Work on a branch, never on `main`. The plan was `refactor/structure` for Phase 0 and `feat/pipeline`
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
-  fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.** Author decision
+  fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
+- **After v0.1.0: the next task is T26** (Phase 3, fixes from `docs/FAILURE_ANALYSIS.md`); T26 to T30 are
+  open and none is started. Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
   skipped. Everything is developed, tuned and reported on s01 (n = 1 building). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
@@ -524,6 +526,82 @@ the `editor_adapter.py import --structure` command and the skipped test.*
 run the demo on s01. Fix anything missing. Merge to `main` and tag `v0.1.0`.
 **Files.** As needed.
 **Accept.** The definition below is met.
+
+---
+
+## Phase 3 — Fixes from the failure analysis (after v0.1.0)
+
+*Status: T26 to T30 open; none started. Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
+visual review of the s01 first-construction output with the generative fill on. Order set by the author:
+T26 (legend and labels), T27 (mask reaching the ground), T28 (alignment acceptance), T29 (slot rule), T30
+(logging). Section numbers such as "§8.3" in these five tasks refer to `docs/FAILURE_ANALYSIS.md`.
+Size: S = under one session, M = one session, L = more than one. Work on a new branch from `main`.*
+
+### T26. Honest marking of generative pixels and legend (a)
+**What.** In `render.mark_view` treat the generative label separately from donor labels: no donor
+outline or tone shift; marking per `first_construction.generative_display` (§10; implement `separate`
+and `inline`). `view_legend` lists an item only when its pixel count is above 0, including "hatched: no
+evidence". Record in `run_meta.json` whether the generative pass ran.
+**Files.** `i2r/render.py`, `i2r/complete.py` (meta), `config.yaml`, `tests/test_render.py`.
+**Accept.** (1) A view with a generative label: no pixel of that label is inside a donor outline, and the
+legend has an "AI guess" item. (2) A view with 0 hatched pixels has no "hatched" legend line. (3) With
+`separate`, `first_construction.png` of a generative run is byte-identical to that of the same run with
+the fill off. (4) `restoration.png` of the reference run `20261112_141348` is byte-identical before and
+after. Tests for each.
+**Size.** S.
+
+### T27. Keep the fill off the ground (b)
+**What.** Give the pipeline a notion of "outside the facade". Options to decide when starting: a
+per-structure `facade_mask.png` or ground line in `structure.yaml` drawn by the author, or the convex hull
+of the element boxes (already used in `tools/synthetic_damage.py`). Damage pixels outside it become a
+separate tier C kind `outside_facade`, are never passed to `generative_fill`, and are hatched with their
+own legend text. **[needs author]** Redraw or confirm the lower-left lobe of the s01 mask.
+**Files.** `i2r/evidence.py`, `i2r/complete.py`, `i2r/render.py`, `config.yaml`, `data/README.md`, tests.
+**Accept.** On s01 with the fill on: 0 generated pixels below the facade limit; the lobe at point 5 is
+unchanged from the photograph; `provenance.json` lists the excluded area and its pixel count. With the
+fill off, outputs change only in the legend text for that area. A test with a synthetic mask that
+reaches below the hull.
+**Size.** S to M (M if a new mask file and its editor support are chosen).
+
+### T28. Alignment acceptance: bound flag, seam test, threshold, "guess" status (c)
+**What.** In `complete.align` and `transfer`: record on-bound flags and the search limits; compute seam
+agreement; add `complete.min_alignment_score` and `complete.min_seam_agreement`; a target failing
+them gets status `guess_needs_expert`, is not completed in the restoration view, and is completed but
+marked as a guess in the first-construction view (same marking family as T26). The seam agreement is item
+3 of §4. Add the fidelity over
+filled pixels to `evaluation/evaluate.py completion` and calibrate as in §8.3; write the result as
+`docs/rnd/RND-004-alignment-acceptance.md`. Only after that, try a wider search and anisotropic scale and
+report whether optima leave the bounds. **[needs author]** Decide what `recovered_arch_001` is (§9):
+correct its box in the editor, or reject the record.
+**Files.** `i2r/complete.py`, `i2r/render.py`, `evaluation/evaluate.py`, `config.yaml`, tests, RND-004.
+**Accept.** (1) `completion.json` has `on_bound`, `limits`, `seam_agreement` for every completed target.
+(2) The note states the threshold, the 9 cases it came from, and whether it flags `t_003`; if it cannot
+separate good from bad, it says so. (3) No tier A target that ends on a bound is presented as plain
+"completed" without the flag. (4) Preservation stays 0; tests cover a donor deliberately misplaced by 10
+px (must be flagged) and a correct one (must pass).
+**Size.** M to L.
+
+### T29. Slot rule beside a surviving fragment (d)
+**What.** `evidence.slot_is_free` should not call a slot free when a same-class fragment stands beside
+it. Proposal: test against the fragment's box extended along the element's long axis to the row's height
+(the fragment box covers only the standing part), or require a minimum centre distance as a share of the
+row spacing. Give `recovered_pilaster_046`-like fragments a second chance as tier A with the size filter
+applied to width only when the element is cut by the damage mask. All tier B targets carry
+`guess_needs_expert` in the first-construction view (see T28).
+**Files.** `i2r/evidence.py`, `config.yaml`, `tests/test_evidence_b.py`.
+**Accept.** On s01: `t_012` is either not produced or flagged as a guess, with the reason logged; the
+nearest same-class element and its distance are in `evidence.json` for every slot. Synthetic test: full
+recovery not below 1 of 12, `background__bg01` no longer tier B, or the note says why it still is.
+**Size.** S to M.
+
+### T30. Remaining logging (e)
+**What.** The items of §4 not covered by T26 to T29: final placement rectangle, share of the donor used
+and discarded, per-target crops `targets/<target_id>_<view>.png` (photograph, mask, donor as placed,
+result), nearest-element distance for slots if not done in T29.
+**Files.** `i2r/complete.py`, `i2r/evidence.py`, tests.
+**Accept.** For every completed target of the reference run the crop exists and `completion.json` holds
+the rectangle and the two shares; outputs of both views are byte-identical to before (logging only).
+**Size.** S.
 
 ---
 
