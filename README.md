@@ -108,6 +108,8 @@ python tools/check_env.py             # checks versions and CUDA
 python -m unittest discover tests     # 130 tests, no GPU needed
 ```
 
+In a fresh clone one test is skipped: it needs the author's local expert inventory, which is not in git.
+
 Model weights are not in the repository. The detection and evidence models (OWL-ViT, SAM, DINOv2-small;
 IDs in `config.yaml`) are downloaded to the Hugging Face cache on first use. The generative models
 (`config.yaml` › `models`) are read only from `models.cache_dir` and are never downloaded during a run;
@@ -140,6 +142,13 @@ set that path for your machine, or leave the generative fill off.
    python tools/editor_adapter.py edit --run outputs/<id>/<timestamp>
    python tools/refine_masks.py --run outputs/<id>/<timestamp>     # SAM masks for boxes drawn in the editor
    python run.py --structure <id> --from damage --no-review
+   ```
+
+   An inventory saved earlier by the editor can be imported instead of editing again; this creates a new
+   run, which `refine_masks.py` then takes:
+
+   ```bash
+   python tools/editor_adapter.py import --structure <id> --inventory <saved inventory .json or folder>
    ```
 
    `--from <step>` copies the files of the latest run of that building and starts at that step;

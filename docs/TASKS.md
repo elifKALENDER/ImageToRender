@@ -13,7 +13,8 @@
 - Do the tasks in order. Do not start a task until the previous one meets its acceptance criteria.
 - Work on a branch, never on `main`. The plan was `refactor/structure` for Phase 0 and `feat/pipeline`
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
-- **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). The next task is T25.** Author decision
+- **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: the fresh-clone
+  check passed; merging into `main` and the `v0.1.0` tag wait for the author.** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
   skipped. Everything is developed, tuned and reported on s01 (n = 1 building). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
@@ -506,6 +507,18 @@ table, example images, install, the one-command demo, the results tables with n 
 **Accept.** Every path and command in the README exists and works. Example images total under 4 MB.
 
 ### T25. Fresh-clone check and tag
+*Status: clone check done 2026-11-12; merge and tag wait for the author. Cloned `refactor/structure`
+(674a057) from GitHub into an empty folder. The existing conda env was used, not a new one (installing
+packages is not allowed here; `check_env.py` passed). 130 tests pass, 1 skipped (it needs the local
+expert inventory). Only `image.png` and `damage_mask.png` of s01 were copied in by hand (not in git, unknown
+licence). `run.py --structure s01_test_church --no-review` ran end to end from detection (48 elements, 46
+targets, same as in the working copy). Importing the locked expert inventory, `refine_masks.py` and
+`--from damage` reproduced the reference run byte for byte (`restoration.png`, `first_construction.png`,
+completed and source images; 5 A, 2 B, 12 C; 4,971 / 11,367 px). v1 items checked by an independent
+script: outputs exist, 0 pixels changed outside the mask in both views, every completed label has a
+provenance entry with donor, tier and confidence, no generative pixels in the restoration view; the
+repository root holds only `run.py` and `config.yaml` as scripts. Fixed in the README from following it:
+the `editor_adapter.py import --structure` command and the skipped test.*
 **What.** Clone the repository into a new folder, activate the conda env, follow the README only, and
 run the demo on s01. Fix anything missing. Merge to `main` and tag `v0.1.0`.
 **Files.** As needed.
