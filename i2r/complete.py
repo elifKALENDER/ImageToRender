@@ -11,8 +11,10 @@ Donor transfer (docs/ARCHITECTURE.md §5.5), deterministic, no model:
 
 View rules (§5.3, §5.4) are a table, ``VIEW_RULES``: record -> (complete?, reason). The restoration
 rule completes tier A, tier B only with ``restoration.include_tier_b``, never tier C. The
-first-construction rule completes tiers A and B by donor transfer; tier C is left open until the
-generative fill (T21) exists and ``first_construction.generative`` is true.
+first-construction rule completes tiers A and B by donor transfer. With ``first_construction.generative``
+(T21) one ControlNet inpaint pass (``generative_fill``) then fills the damage pixels the donors left open,
+on a context crop of the donor-completed image; only those pixels are replaced, and they get one label
+named ``generative_fill``. The restoration view never runs it. Debug images: ``generative_*.png``.
 
 At the end of every view: no pixel outside the damage mask may differ from the photograph
 (``assert_preserved``); otherwise the run fails with ``PreservationError``.
@@ -70,7 +72,7 @@ def rule_first_construction(record: dict, config: dict) -> tuple[bool, str]:
     if tier == "B":
         return True, "tier B: positional evidence"
     if config["first_construction"]["generative"]:
-        return False, "tier C: generative fill is not implemented yet (T21)"
+        return False, "tier C: no donor; covered by the single generative pass (provenance: generative_fill)"
     return False, "tier C: no evidence; generative fill off (first_construction.generative: false)"
 
 
@@ -239,9 +241,192 @@ def assert_preserved(original: np.ndarray, result: np.ndarray, damage: np.ndarra
                                 f"first at x={int(xs[0])}, y={int(ys[0])}")
 
 
+# ---------------------------------------------------------------------------
+# Tier C generative fill (T21; first-construction view only)
+# ---------------------------------------------------------------------------
+
+GENERATIVE_LABEL_NAME = "generative_fill"
+
+
+class GenerativeError(ContractError):
+    """The generative models could not be loaded or run."""
+
+
+def open_area(damage: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    """Damage pixels no donor filled: the area the generative pass may change."""
+    return (damage > 0) & (labels == 0)
+
+
+def context_box(area: np.ndarray, min_px: int) -> list[int]:
+    """Bounding box of ``area`` grown (about its centre) to at least ``min_px`` per side, kept inside
+    the image; the whole image side when the image is smaller."""
+    ys, xs = np.nonzero(area)
+    if len(xs) == 0:
+        raise ContractError("context_box: empty area")
+    height, width = area.shape
+
+    def span(lo: int, hi: int, size: int) -> tuple[int, int]:
+        need = min(size, max(hi - lo, min_px))
+        start = (lo + hi) // 2 - need // 2
+        start = max(0, min(start, size - need))
+        return start, start + need
+
+    x1, x2 = span(int(xs.min()), int(xs.max()) + 1, width)
+    y1, y2 = span(int(ys.min()), int(ys.max()) + 1, height)
+    return [x1, y1, x2, y2]
+
+
+def generation_size(width: int, height: int, max_side: int) -> tuple[int, int]:
+    """(w, h) with the long side ``max_side``, both multiples of 8 and at least 64."""
+    scale = max_side / max(width, height)
+    return (max(64, int(round(width * scale / 8)) * 8), max(64, int(round(height * scale / 8)) * 8))
+
+
+def paste_area(out: np.ndarray, labels: np.ndarray, generated: np.ndarray, area: np.ndarray, label: int) -> int:
+    """Copy ``generated`` into ``out`` only where ``area`` is set; label those pixels. Returns the count."""
+    out[area] = generated[area]
+    labels[area] = label
+    return int(area.sum())
+
+
+def neutralize_inside(control: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Control image with the masked pixels set to the median colour outside the mask (archived
+    inpaint_v3: the collapse would otherwise steer the geometry)."""
+    out = control.copy()
+    outside = out[~mask]
+    fill = np.median(outside, axis=0).astype(np.uint8) if outside.size else np.array([127, 127, 127], np.uint8)
+    out[mask] = fill
+    return out
+
+
+def generative_fill(image: np.ndarray, area: np.ndarray, config: dict, log) -> tuple[np.ndarray, dict[str, Any]]:
+    """One ControlNet inpaint pass (depth + lineart, SD 1.5) over a context crop around ``area``,
+    set up as in archive/inpaint/inpaint_v3.py. Returns (full-size image whose ``area`` pixels are the
+    generated ones, elsewhere a copy of ``image``; info)."""
+    import gc
+    import time
+
+    import torch
+    from diffusers import (AutoencoderKL, ControlNetModel, DPMSolverMultistepScheduler,
+                           StableDiffusionControlNetInpaintPipeline)
+    from PIL import ImageFilter
+    from transformers import AutoImageProcessor, DPTForDepthEstimation
+
+    fcfg, mcfg = config["first_construction"], config["models"]
+    hub = {"cache_dir": mcfg["cache_dir"], "local_files_only": bool(mcfg["local_files_only"])}
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    dtype = torch.float16 if device == "cuda" else torch.float32
+    t0 = time.perf_counter()
+    if device == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+
+    box = context_box(area, int(fcfg["context_min_px"]))
+    x1, y1, x2, y2 = box
+    crop, crop_area = image[y1:y2, x1:x2], area[y1:y2, x1:x2]
+    gw, gh = generation_size(x2 - x1, y2 - y1, int(fcfg["generation_max_side_px"]))
+    photo = Image.fromarray(crop).resize((gw, gh), Image.LANCZOS)
+    mask_small = cv2.resize(crop_area.astype(np.uint8) * 255, (gw, gh), interpolation=cv2.INTER_NEAREST)
+    mask_img = Image.fromarray(mask_small, "L")
+    for _ in range(max(0, int(fcfg["mask_expand_px"]))):
+        mask_img = mask_img.filter(ImageFilter.MaxFilter(3))
+    if float(fcfg["mask_feather_px"]) > 0:
+        mask_img = mask_img.filter(ImageFilter.GaussianBlur(float(fcfg["mask_feather_px"])))
+    log.info("[complete] generative: crop %s (%d x %d) -> %d x %d, open area %d px", box, x2 - x1, y2 - y1,
+             gw, gh, int(crop_area.sum()))
+
+    try:
+        # Conditioning from the donor-completed image (archived prepare_depth / prepare_lineart).
+        depth_model = DPTForDepthEstimation.from_pretrained(mcfg["depth_estimator"], **hub).to(device)
+        depth_proc = AutoImageProcessor.from_pretrained(mcfg["depth_estimator"], **hub)
+        inputs = {k: v.to(device) for k, v in depth_proc(images=photo, return_tensors="pt").items()}
+        with torch.no_grad():
+            pred = depth_model(**inputs).predicted_depth
+        pred = torch.nn.functional.interpolate(pred.unsqueeze(1), size=(gh, gw), mode="bicubic", align_corners=False)
+        arr = pred.squeeze().float().cpu().numpy()
+        arr -= arr.min()
+        arr = (arr * 255.0 / (float(arr.max()) or 1.0)).clip(0, 255).astype(np.uint8)
+        depth = np.repeat(arr[..., None], 3, axis=2)
+        del depth_model, depth_proc, inputs, pred
+        gc.collect()
+
+        from controlnet_aux.lineart import LineartDetector
+
+        detector = LineartDetector.from_pretrained(mcfg["annotator_repo"], cache_dir=mcfg["cache_dir"],
+                                                   local_files_only=bool(mcfg["local_files_only"]))
+        lineart = np.asarray(detector(photo).convert("RGB").resize((gw, gh), Image.LANCZOS))
+        del detector
+        gc.collect()
+        if device == "cuda":
+            torch.cuda.empty_cache()
+        if fcfg["neutralize_control_in_mask"]:
+            hard = mask_small > 127
+            depth, lineart = neutralize_inside(depth, hard), neutralize_inside(lineart, hard)
+
+        # Pipeline (archived build_pipeline, without the IP-Adapter).
+        controls = [ControlNetModel.from_pretrained(mcfg["depth_controlnet"], torch_dtype=dtype, **hub),
+                    ControlNetModel.from_pretrained(mcfg["lineart_controlnet"], torch_dtype=dtype, **hub)]
+        vae = AutoencoderKL.from_pretrained(mcfg["vae"], torch_dtype=dtype, **hub)
+        pipe = StableDiffusionControlNetInpaintPipeline.from_pretrained(
+            mcfg["inpaint_base"], controlnet=controls, vae=vae, torch_dtype=dtype, safety_checker=None,
+            use_safetensors=bool(mcfg["use_safetensors"]), **hub)
+    except OSError as exc:
+        raise GenerativeError(f"generative fill: a model is missing from {mcfg['cache_dir']} ({exc})") from exc
+    pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config, use_karras_sigmas=True)
+    attention = "xformers"
+    try:
+        pipe.enable_xformers_memory_efficient_attention()
+    except (ImportError, ModuleNotFoundError, RuntimeError, ValueError) as exc:
+        log.warning("[complete] generative: xformers unavailable (%s); attention slicing", exc)
+        pipe.enable_attention_slicing("max")
+        attention = "slicing"
+    pipe.enable_vae_slicing()
+    if device == "cuda" and mcfg["enable_cpu_offload"]:
+        pipe.enable_model_cpu_offload()
+        gen_device = "cuda"
+    else:
+        pipe = pipe.to(device)
+        gen_device = device
+    generator = torch.Generator(device=gen_device).manual_seed(int(fcfg["seed"]))
+    result = pipe(
+        prompt=fcfg["prompt"], negative_prompt=fcfg["negative_prompt"], image=photo, mask_image=mask_img,
+        control_image=[Image.fromarray(depth), Image.fromarray(lineart)],
+        controlnet_conditioning_scale=[float(fcfg["depth_scale"]), float(fcfg["lineart_scale"])],
+        control_guidance_end=[float(v) for v in fcfg["guidance_end"]], strength=float(fcfg["strength"]),
+        num_inference_steps=int(fcfg["steps"]), guidance_scale=float(fcfg["guidance_scale"]),
+        height=gh, width=gw, generator=generator,
+    ).images[0].convert("RGB")
+    peak = round(torch.cuda.max_memory_allocated() / 2 ** 30, 2) if device == "cuda" else None
+    del pipe, controls, vae
+    gc.collect()
+    if device == "cuda":
+        torch.cuda.empty_cache()
+
+    generated = cv2.resize(np.asarray(result), (x2 - x1, y2 - y1), interpolation=cv2.INTER_CUBIC)
+    full = image.copy()
+    full[y1:y2, x1:x2] = generated
+    info = {
+        "method": "generative", "context_box": box, "generation_size": [gw, gh], "seed": int(fcfg["seed"]),
+        "strength": float(fcfg["strength"]), "steps": int(fcfg["steps"]),
+        "guidance_scale": float(fcfg["guidance_scale"]),
+        "controlnet_scales": [float(fcfg["depth_scale"]), float(fcfg["lineart_scale"])],
+        "guidance_end": [float(v) for v in fcfg["guidance_end"]],
+        "models": {k: mcfg[k] for k in ("inpaint_base", "vae", "depth_controlnet", "lineart_controlnet",
+                                         "depth_estimator", "annotator_repo")},
+        "device": device, "attention": attention, "peak_vram_gb": peak,
+        "seconds": round(time.perf_counter() - t0, 1),
+        "debug": {"depth": depth, "lineart": lineart, "raw": np.asarray(result), "mask": np.asarray(mask_img)},
+    }
+    return full, info
+
+
 def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[dict],
-                  donor_masks: dict[str, np.ndarray], config: dict) -> tuple[np.ndarray, np.ndarray, dict]:
-    """Apply one view's rule. Returns (completed image, uint16 label image, report)."""
+                  donor_masks: dict[str, np.ndarray], config: dict,
+                  generate: Callable[[np.ndarray, np.ndarray, dict], tuple[np.ndarray, dict]] | None = None,
+                  ) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Apply one view's rule. Returns (completed image, uint16 label image, report).
+
+    ``generate(image, open_area, config) -> (image, info)`` is the tier C pass; it runs only for the
+    first-construction view when ``first_construction.generative`` is true."""
     rule = VIEW_RULES[view]
     ccfg = config["complete"]
     out = rgb.copy()
@@ -269,12 +454,27 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
             entry["pixels_changed"] = int((labels == entry["label"]).sum())
             if entry["pixels_changed"] == 0:
                 entry["status"] = "completed_but_empty"
+    generative = None
+    if view == "first_construction" and config["first_construction"]["generative"] and generate is not None:
+        area = open_area(damage, labels)
+        if area.any():
+            before = out.copy()
+            filled, info = generate(out, area, config)
+            label = len(label_names) + 1
+            label_names[str(label)] = GENERATIVE_LABEL_NAME
+            info["label"] = label
+            info["pixels_changed"] = paste_area(out, labels, filled, area, label)
+            # the pass may change only the open area (accept criterion of T21)
+            if np.any(np.any(before != out, axis=-1) & ~area):
+                raise PreservationError(f"[{view}] generative fill changed pixels outside the open area")
+            generative = info
     assert_preserved(rgb, out, damage, view)
     order = {r["target_id"]: i for i, r in enumerate(records)}
     results.sort(key=lambda e: order[e["target_id"]])
     report = {"rule": rule.__name__, "labels": label_names, "targets": results,
               "pixels_changed": int((labels > 0).sum()),
-              "completed": sum(1 for e in results if e["status"] == "completed")}
+              "completed": sum(1 for e in results if e["status"] == "completed"),
+              "generative": generative}
     return out, labels, report
 
 
@@ -325,7 +525,17 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
             log.info("[complete] view %s: no rule in VIEW_RULES", view)
             report["views"][view] = {"status": "not_implemented"}
             continue
-        out, labels, view_report = complete_view(view, rgb, damage, records, donor_masks, run.config)
+        def generate(image: np.ndarray, area: np.ndarray, config: dict) -> tuple[np.ndarray, dict]:
+            return generative_fill(image, area, config, log)
+
+        out, labels, view_report = complete_view(view, rgb, damage, records, donor_masks, run.config, generate)
+        gen = view_report.get("generative")
+        if gen is not None:
+            debug = gen.pop("debug")
+            for name, arr in debug.items():
+                Image.fromarray(arr).save(run.path(f"generative_{name}.png"))
+            log.info("[complete] generative: %d px replaced in the open area, %.1f s, peak VRAM %s GB, %s",
+                     gen["pixels_changed"], gen["seconds"], gen["peak_vram_gb"], gen["attention"])
         Image.fromarray(out).save(run.path(f"{view}_completed.png"))
         Image.fromarray(labels).save(run.path(f"{view}_source.png"))
         report["views"][view] = view_report

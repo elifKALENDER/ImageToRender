@@ -32,6 +32,7 @@ from PIL import Image
 
 from i2r.detect import class_color, load_elements
 from i2r.runio import ContractError, read_json, write_json
+from i2r.complete import GENERATIVE_LABEL_NAME
 
 if TYPE_CHECKING:
     import argparse
@@ -146,6 +147,8 @@ def source_map(photo: np.ndarray, labels: np.ndarray, label_targets: dict[str, d
     """Faded grey photograph; changed pixels coloured by tier (method donor_transfer); target IDs."""
     g = cv2.cvtColor(photo, cv2.COLOR_RGB2GRAY).astype(np.float32)
     out = np.repeat((g * 0.45 + 120)[..., None], 3, axis=2).astype(np.uint8)
+    if generative_label is not None:
+        out[labels == int(generative_label)] = CONJECTURE_COLOUR
     for value, record in label_targets.items():
         sel = labels == int(value)
         if not sel.any():
@@ -232,9 +235,9 @@ def conjecture_overlay(photo: np.ndarray, damage: np.ndarray, labels: np.ndarray
     g = cv2.cvtColor(photo, cv2.COLOR_RGB2GRAY).astype(np.float32)
     out = np.repeat((g * 0.45 + 120)[..., None], 3, axis=2).astype(np.uint8)
     generative = np.zeros(damage.shape, dtype=bool)
-    for e in report["targets"]:
-        if e.get("method") == "generative" and e.get("label"):
-            generative |= labels == e["label"]
+    gen = report.get("generative")
+    if gen and gen.get("label"):
+        generative |= labels == gen["label"]
     out[generative] = CONJECTURE_COLOUR
     open_damage = (damage > 0) & (labels == 0)
     spacing = int(rcfg["hatch_spacing_px"])
@@ -335,9 +338,11 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         statuses = {e["target_id"]: e["status"] for e in report["targets"]}
         marked, counts = mark_view(completed, damage, labels, records, statuses, rcfg)
         Image.fromarray(with_bar(marked, rcfg, view, view_legend(rcfg, counts))).save(run.path(f"{view}.png"))
-        label_targets = {k: by_id[v] for k, v in report["labels"].items()}
-        Image.fromarray(with_bar(source_map(photo, labels, label_targets, ts=float(rcfg["text_scale"])), rcfg, view,
-                                        SOURCE_MAP_LEGEND)).save(
+        gen = report.get("generative")
+        gen_label = gen["label"] if gen else None
+        label_targets = {k: by_id[v] for k, v in report["labels"].items() if v != GENERATIVE_LABEL_NAME}
+        Image.fromarray(with_bar(source_map(photo, labels, label_targets, gen_label, ts=float(rcfg["text_scale"])),
+                                 rcfg, view, SOURCE_MAP_LEGEND)).save(
             run.path(f"{view}_source_map.png"))
         if view == "first_construction":
             overlay, generative_px = conjecture_overlay(photo, damage, labels, report, rcfg)
@@ -362,6 +367,10 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
                          if v == "first_construction" else {})} for v in rendered},
         "method_values": ["donor_transfer", "generative", "none"],
         "targets": entries,
+        # One conjecture entry per view that ran the tier C pass: no donor, no evidence (§5.4, §5.6).
+        "generative_fill": {v: {"method": "generative", "donor_id": None, "evidence": "conjecture",
+                                **{k: rep["generative"][k] for k in rep["generative"] if k != "debug"}}
+                            for v, rep in completion["views"].items() if rep.get("generative")},
     })
     Image.fromarray(with_bar(targets_overlay(photo, elements, records, float(rcfg["text_scale"])), rcfg, None)).save(run.path(OVERLAY))
     Image.fromarray(bar(photo.shape[1], rcfg, None)).save(run.path(LEGEND))

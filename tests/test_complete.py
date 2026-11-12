@@ -154,5 +154,80 @@ class PreservationTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
+
+def fake_generate(calls: list):
+    """Stands in for generative_fill: paints the whole image magenta-ish and records the open area."""
+    def generate(image: np.ndarray, area: np.ndarray, cfg: dict) -> tuple[np.ndarray, dict]:
+        calls.append(area.copy())
+        return np.full_like(image, 200), {"method": "generative", "seconds": 0.0}
+    return generate
+
+
+class GenerativeTest(unittest.TestCase):
+    def test_context_box_grows_to_min_size_inside_the_image(self) -> None:
+        area = np.zeros((300, 400), bool)
+        area[100:120, 50:60] = True
+        box = complete.context_box(area, 128)
+        self.assertEqual((box[2] - box[0], box[3] - box[1]), (128, 128))
+        self.assertTrue(box[0] <= 50 and box[2] >= 60 and box[1] <= 100 and box[3] >= 120)
+        self.assertEqual(complete.context_box(area, 1000), [0, 0, 400, 300])   # image smaller than min
+
+    def test_generation_size_multiple_of_8(self) -> None:
+        self.assertEqual(complete.generation_size(600, 300, 512), (512, 256))
+        w, h = complete.generation_size(517, 611, 512)
+        self.assertEqual((w % 8, h % 8, max(w, h)), (0, 0, 512))
+
+    def test_neutralize_inside(self) -> None:
+        control = np.zeros((4, 4, 3), np.uint8)
+        control[:, :2] = 10
+        control[:, 2:] = 250
+        mask = np.zeros((4, 4), bool)
+        mask[:, 2:] = True
+        out = complete.neutralize_inside(control, mask)
+        self.assertTrue(np.all(out[:, 2:] == 10))
+        self.assertTrue(np.all(out[:, :2] == 10))
+
+    def test_generative_pass_changes_only_the_open_area_of_first_construction(self) -> None:
+        rgb, damage, donor_mask, _ = scene()
+        damage[75:85, 5:30] = 1                       # open damage with no target: tier C area
+        cfg = config()
+        cfg["first_construction"]["generative"] = True
+        calls: list = []
+        recs = [record("A")]
+        out, labels, report = complete.complete_view("first_construction", rgb, damage, recs,
+                                                     {"donor": donor_mask}, cfg, fake_generate(calls))
+        area = calls[0]
+        self.assertTrue(np.all(damage[area] == 1))
+        gen = report["generative"]
+        self.assertEqual(report["labels"][str(gen["label"])], complete.GENERATIVE_LABEL_NAME)
+        self.assertEqual(gen["pixels_changed"], int(area.sum()))
+        self.assertTrue(np.all(out[area] == 200))
+        self.assertTrue(np.array_equal(out[~area & (labels != gen["label"])],
+                                       complete.complete_view("first_construction", rgb, damage, recs,
+                                                              {"donor": donor_mask}, config())[0][~area & (labels != gen["label"])]))
+        self.assertTrue(np.array_equal(out[damage == 0], rgb[damage == 0]))
+
+    def test_restoration_is_identical_with_and_without_the_generative_pass(self) -> None:
+        rgb, damage, donor_mask, _ = scene()
+        damage[75:85, 5:30] = 1
+        on = config()
+        on["first_construction"]["generative"] = True
+        calls: list = []
+        a, la, ra = complete.complete_view("restoration", rgb, damage, [record("A")], {"donor": donor_mask}, on,
+                                           fake_generate(calls))
+        b, lb, rb = complete.complete_view("restoration", rgb, damage, [record("A")], {"donor": donor_mask}, config())
+        self.assertEqual(calls, [])
+        self.assertTrue(np.array_equal(a, b) and np.array_equal(la, lb))
+        self.assertIsNone(ra["generative"])
+
+    def test_generative_off_never_calls_the_model(self) -> None:
+        rgb, damage, donor_mask, _ = scene()
+        calls: list = []
+        _, _, report = complete.complete_view("first_construction", rgb, damage, [record("A")],
+                                              {"donor": donor_mask}, config(), fake_generate(calls))
+        self.assertEqual(calls, [])
+        self.assertIsNone(report["generative"])
+
+
 if __name__ == "__main__":
     unittest.main()

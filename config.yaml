@@ -237,21 +237,43 @@ synthetic:
   background_covered_share: 0.50    # a background rectangle counts as given tier A/B when an A/B box covers this share
 
 first_construction:
-  generative: false                # tier C fill (T21); stays off unless it proves usable
-  strength: 0.55
-  steps: 30
+  # Tier C generative fill (T21, i2r/complete.py generative_fill): one ControlNet inpaint pass over a
+  # context crop around every damage pixel the donors left open, starting from the donor-completed
+  # first-construction image; conditioning (depth, lineart) is computed from that image. Only pixels of
+  # that open area are replaced. Never runs for the restoration view. Off unless RND-003 judges it usable.
+  generative: false
+  # Values copied from the archived first-construction mode ("ozgun_hal") of archive/inpaint/inpaint_v3.py;
+  # never calibrated. strength was 0.55 here as a placeholder before T21.
+  strength: 0.96
+  steps: 40
   guidance_scale: 6.5
-  context_min_px: 512
+  depth_scale: 0.24
+  lineart_scale: 0.34
+  guidance_end: [0.42, 0.56]       # depth, lineart: share of the steps each ControlNet guides
+  neutralize_control_in_mask: true # replace the control images inside the mask by their median outside it
+  mask_expand_px: 5                # generation mask grown and blurred at generation resolution (archived values);
+  mask_feather_px: 3.0             # the result is still pasted only into the open area itself
+  context_min_px: 512              # the crop around the open area is at least this wide and high (image allowing)
+  generation_max_side_px: 512      # the crop is resized so its long side is this (SD 1.5), multiple of 8
   seed: 42
   prompt: >-
-    historic stone masonry building, original construction state, same architectural language,
-    same stone, same light, photorealistic photograph
+    the exact same historical building and the exact same camera view, reconstruct only the masked
+    missing architectural portions, continue the surviving architectural rhythm, arches, pilasters,
+    cornices and masonry courses visible in the photograph, plausible original construction state,
+    period-authentic stonework, photorealistic photograph, natural daylight, no redesign
   negative_prompt: >-
     redesigned building, altered architecture, extra windows, duplicate arches, modern facade,
     concrete, glass, fantasy architecture, changed viewpoint, warped columns, melted masonry,
-    low quality, blurry, cartoon, painting, text, watermark
+    ruin, collapsed wall, missing masonry, low quality, blurry, cartoon, painting, text, watermark
 
 models:
+  # Hugging Face cache holding the generative models (this machine: F:/huggingface/hub, filled by the archived
+  # experiments; F:/hf_cache/hub lacks the dpt-hybrid-midas weights). null = the default cache.
+  # local_files_only: never download during a run.
+  cache_dir: F:/huggingface/hub
+  local_files_only: true
+  use_safetensors: false
+  enable_cpu_offload: true          # needed on 6 GB
   inpaint_base: SG161222/Realistic_Vision_V6.0_B1_noVAE
   vae: stabilityai/sd-vae-ft-mse
   depth_controlnet: lllyasviel/control_v11f1p_sd15_depth

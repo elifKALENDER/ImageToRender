@@ -13,7 +13,7 @@
 - Do the tasks in order. Do not start a task until the previous one meets its acceptance criteria.
 - Work on a branch, never on `main`. The plan was `refactor/structure` for Phase 0 and `feat/pipeline`
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
-- **Status (2026-11-12): T01 to T20, T12b and T16b are done. The next task is T21 (optional).** Author decision
+- **Status (2026-11-12): T01 to T21, T12b and T16b are done (T22-T23 skipped). The next task is T24.** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
   skipped. Everything is developed, tuned and reported on s01 (n = 1 building). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
@@ -117,7 +117,7 @@ version differs.
 
 ## Phase 1 — Pipeline, module by module
 
-*Status: T08 to T20 done (T08 to T11 without a note of their own). T21 open.*
+*Status: T08 to T21 done (T08 to T11 without a note of their own).*
 
 ### T08. `config.yaml`, `i2r/runio.py`, `run.py` skeleton
 **What.** Create `config.yaml` with every section named in §3 and the initial values given in §5 (mark
@@ -445,6 +445,12 @@ the chosen values, the failure cases with images, and a comparison with the 10 h
 same structure they are reported on.
 
 ### T21. Tier C generative fill
+*Status: done, verdict **not usable**, step left off (`docs/rnd/RND-003-generative-fill.md`).
+`complete.generative_fill` runs the archived inpaint_v3 set-up (first-construction mode values) once on a
+context crop of the donor-completed image and pastes only into the damage pixels the donors left open.
+On s01: 3.32 GB peak, 125 s; restoration view byte-identical; no pixel outside the open area changed.
+The image invents a frieze and an entrance portal, melts the bases and shows seams. Models load from
+`models.cache_dir` with `local_files_only` (no download during a run).*
 **What.** Copy the ControlNet inpaint set-up from `archive/inpaint/inpaint_v3.py` into `complete.py`
 (pipeline loading, memory settings, lineart and depth conditioning). Run it **once** per image on a
 context crop of at least 512 px around the tier C area, starting from the donor-completed
