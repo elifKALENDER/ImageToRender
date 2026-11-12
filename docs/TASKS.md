@@ -13,7 +13,7 @@
 - Do the tasks in order. Do not start a task until the previous one meets its acceptance criteria.
 - Work on a branch, never on `main`. The plan was `refactor/structure` for Phase 0 and `feat/pipeline`
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
-- **Status (2026-11-12): T01 to T21, T12b and T16b are done (T22-T23 skipped). The next task is T24.** Author decision
+- **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). The next task is T25.** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
   skipped. Everything is developed, tuned and reported on s01 (n = 1 building). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
@@ -487,6 +487,15 @@ on structure 1 and confirm the numbers did not get worse, or explain why they ch
 **Accept.** Both structures run end to end with one command each. The evaluation table covers both.
 
 ### T24. Examples and README
+*Status: done, without example images: the only test photographs have an unknown licence, so neither
+they nor derived images may be published (`data/README.md`); `docs/examples/` and its `.gitignore`
+exception are not created. README rewritten in English with a Turkish summary: scope, near-frontal
+repeating-facade assumption, tiers and views table, results with n = 1 (detection, synthetic damage, real
+damage, comparison with the Stage 3C-C hypotheses), install, use (including the editor-based workflow
+that a usable result needs), evaluation, limitations (generative fill off), the "AI proposal" statement.
+Checked 2026-11-12: every command in it runs (`--help` and `check_env.py` exit 0), every linked path
+exists, and `python run.py --structure s01_test_church --no-review` runs end to end from detection in
+40 s (to a scratch output folder).*
 **What.** Put a small example set in `docs/examples/<id>/` for each structure whose licence allows it:
 input, element overlay, restoration view, first-construction view, source map (long side 1000 px or
 less). Add a `.gitignore` exception for `docs/examples/`. Rewrite `README.md`: what the project does and
