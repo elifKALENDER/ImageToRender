@@ -72,6 +72,7 @@ def view_rows(provenance: dict, damage_px: int) -> str:
                  ("donor placed as a guess", m.get("donor_guess_px", 0)),
                  ("AI guess (generative) in the image", m.get("ai_guess_px", 0)),
                  ("tier A guess withheld", m.get("open_guess_withheld_px", 0)),
+                 ("placement rejected by the expert", m.get("open_rejected_px", 0)),
                  ("tier B position implied, open", m["open_tier_b_px"]),
                  ("no evidence, open", m["open_no_evidence_px"]),
                  ("outside the facade limit", m.get("open_outside_facade_px", 0))]

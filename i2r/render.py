@@ -131,7 +131,9 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
     ``donor_guess`` = {"labels": labels of donors placed as a guess, "withheld": target IDs of guesses
     not painted in this view} (T28). A painted guess gets the guess marking in ``restoration.guess_color``
     instead of the donor outline and tone shift; the open damage in a withheld guess's box is hatched in
-    that colour.
+    that colour. "rejected": target IDs whose placement the expert rejected (T35): the open damage in
+    their box is cross-hatched in ``restoration.rejected_color``. It is a statement about that placement,
+    not about the evidence: a fragment and a donor exist there.
 
     Open damage pixels outside ``facade`` (1 inside; the run's facade limit) are hatched in their own
     colour: they are not "no evidence" but "not part of the building" (T27).
@@ -144,6 +146,7 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
     guess = (labels == int(generative_label)) if generative_label else np.zeros_like(changed)
     guess_labels = sorted((donor_guess or {}).get("labels", ()))
     withheld = set((donor_guess or {}).get("withheld", ()))
+    rejected = set((donor_guess or {}).get("rejected", ()))
     donor_guess_px = np.isin(labels, guess_labels) if guess_labels else np.zeros_like(changed)
     donor = changed & ~guess & ~donor_guess_px
     layer = completed.astype(np.float32).copy()
@@ -169,15 +172,19 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
     # open areas: B targets not completed, withheld guesses, then everything else still damaged
     open_b = np.zeros_like(damage_b)
     open_g = np.zeros_like(damage_b)
+    open_r = np.zeros_like(damage_b)
     for r in records:
         x1, y1, x2, y2 = r["target_box"]
         if r["target_id"] in withheld:
             open_g[y1:y2, x1:x2] = True
+        elif r["target_id"] in rejected:
+            open_r[y1:y2, x1:x2] = True
         elif r["tier"] == "B" and statuses.get(r["target_id"]) != "completed":
             open_b[y1:y2, x1:x2] = True
     open_g &= damage_b & ~changed
-    open_b &= damage_b & ~changed & ~open_g
-    open_c = damage_b & ~changed & ~open_b & ~open_g
+    open_r &= damage_b & ~changed & ~open_g
+    open_b &= damage_b & ~changed & ~open_g & ~open_r
+    open_c = damage_b & ~changed & ~open_b & ~open_g & ~open_r
     open_out = open_c & (facade == 0) if facade is not None else np.zeros_like(open_c)
     open_c &= ~open_out
     spacing = int(rcfg["hatch_spacing_px"])
@@ -186,6 +193,9 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
     layer[open_b & b_lines] = rcfg["hatch_color_b"]
     if open_g.any():
         layer[open_g & b_lines] = rcfg["guess_color"]
+    if open_r.any():                                           # both diagonals: reads as "crossed out"
+        c_lines = hatch_pattern(damage.shape, spacing, width=int(rcfg["hatch_width_b_px"]))
+        layer[open_r & (b_lines | c_lines)] = rcfg["rejected_color"]
     layer[open_c & hatch_pattern(damage.shape, spacing, offset=spacing // 2,
                                  width=int(rcfg["hatch_width_px"]))] = rcfg["hatch_color"]
     if open_out.any():
@@ -200,6 +210,8 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
         in_box[y1:y2, x1:x2] = True
         if r["target_id"] in withheld:
             labelled += put_label(layer, "guess", open_g & in_box, (255, 255, 255), float(rcfg["text_scale"]))
+        elif r["target_id"] in rejected:
+            labelled += put_label(layer, "rejected", open_r & in_box, (255, 255, 255), float(rcfg["text_scale"]))
         elif r["tier"] == "B" and statuses.get(r["target_id"]) != "completed":
             labelled += put_label(layer, "B: implied", open_b & in_box, (255, 255, 255), float(rcfg["text_scale"]))
         elif r["kind"] == "uncovered_region":
@@ -215,6 +227,7 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
     counts = {"completed_px": int(donor.sum()), "outline_px": int(outline.sum()),
               "ai_guess_px": int(guess.sum()), "ai_guess_marks_px": int(guess_marks.sum()),
               "donor_guess_px": int(donor_guess_px.sum()), "open_guess_withheld_px": int(open_g.sum()),
+              "open_rejected_px": int(open_r.sum()),
               "open_tier_b_px": int(open_b.sum()), "open_no_evidence_px": int(open_c.sum()),
               "open_outside_facade_px": int(open_out.sum()), "labels_drawn": int(labelled)}
     return out, counts
@@ -311,6 +324,8 @@ def view_legend(rcfg: dict, counts: dict[str, int]) -> list:
         items.append((CONJECTURE_COLOUR, AI_GUESS_LEGEND))
     if counts.get("open_guess_withheld_px"):
         items.append((tuple(rcfg["guess_color"]), WITHHELD_GUESS_LEGEND))
+    if counts.get("open_rejected_px"):
+        items.append((tuple(rcfg["rejected_color"]), REJECTED_LEGEND))
     if counts["open_tier_b_px"]:
         items.append((tuple(rcfg["hatch_color_b"]), "hatched: B, position implied, not restored"))
     if counts["open_no_evidence_px"]:
@@ -324,6 +339,7 @@ OUTSIDE_FACADE_LEGEND = "hatched: outside the facade limit, not filled"
 AI_GUESS_LEGEND = "striped: AI guess (generative), no evidence"
 DONOR_GUESS_LEGEND = "striped: donor placed as a guess, needs expert"
 WITHHELD_GUESS_LEGEND = "hatched: tier A guess withheld, needs expert"
+REJECTED_LEGEND = "cross-hatched: placement rejected by the expert"
 AI_GUESS_BANNER = "AI GUESS: no evidence in the photograph"
 GENERATIVE_DISPLAYS = ("separate", "inline")
 
@@ -473,7 +489,8 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         map_labels, map_gen = labels, gen_label
         guesses = [e for e in report["targets"] if e["status"] == GUESS]
         donor_guess = {"labels": {e["label"] for e in guesses if e.get("label")},
-                       "withheld": {e["target_id"] for e in guesses if not e.get("label")}}
+                       "withheld": {e["target_id"] for e in guesses if not e.get("label")},
+                       "rejected": {e["target_id"] for e in report["targets"] if e["status"] == REJECTED}}
         if gen_label and display == "separate":
             # The view image holds no generated pixel: it is the image the same run gives with the fill
             # off. The guess is a second file, marked and with a banner (FAILURE_ANALYSIS §10, option 1).

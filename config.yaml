@@ -263,6 +263,7 @@ restoration:
   text_scale: 1.0                   # OpenCV font scale factor for labels, legend and bar (scaled with the image)
   hatch_color: [220, 60, 60]        # tier C: no evidence
   guess_color: [255, 150, 30]       # a donor placed or withheld as a guess (T28): orange stripes or hatch
+  rejected_color: [200, 90, 230]    # open damage of a placement the expert rejected (T35): violet cross-hatch
   hatch_color_outside: [170, 170, 170]  # damage outside the facade limit: not part of the building (grey)
   hatch_color_b: [90, 180, 255]     # tier B when not restored: position implied (light blue, reads on dark)
   label: "AI proposal, not a restoration decision"

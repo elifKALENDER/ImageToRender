@@ -296,6 +296,24 @@ class GenerativeMarkingTest(unittest.TestCase):
         self.assertFalse(np.any(np.all(outside == rcfg["guess_color"], axis=-1)))
         self.assertIn(render.WITHHELD_GUESS_LEGEND, legend_texts(rcfg, counts))
 
+    def test_a_rejected_placement_is_cross_hatched_in_its_own_colour(self) -> None:
+        rcfg = load_config()["restoration"]
+        completed = np.full((40, 60, 3), 100, np.uint8)
+        labels = np.zeros((40, 60), np.uint16)
+        damage = np.zeros((40, 60), np.uint8)
+        damage[5:35, 5:55] = 1
+        records = [{"target_id": "t_001", "tier": "A", "kind": "fragmented_element", "target_box": [5, 5, 30, 35]}]
+        marked, counts = render.mark_view(completed, damage, labels, records, {"t_001": "rejected_by_expert"}, rcfg,
+                                          donor_guess={"labels": set(), "withheld": set(), "rejected": {"t_001"}})
+        self.assertEqual(counts["open_rejected_px"], 25 * 30)
+        self.assertEqual(counts["open_no_evidence_px"], 25 * 30)          # the rest of the damage, not the box
+        inside, outside = marked[5:35, 5:30].reshape(-1, 3), marked[5:35, 30:55].reshape(-1, 3)
+        self.assertTrue(np.any(np.all(inside == rcfg["rejected_color"], axis=-1)))
+        self.assertFalse(np.any(np.all(inside == rcfg["hatch_color"], axis=-1)))
+        self.assertFalse(np.any(np.all(outside == rcfg["rejected_color"], axis=-1)))
+        self.assertIn(render.REJECTED_LEGEND, legend_texts(rcfg, counts))
+        self.assertNotIn(render.REJECTED_LEGEND, legend_texts(rcfg, {**counts, "open_rejected_px": 0}))
+
     def test_legend_lists_only_what_occurs(self) -> None:
         rcfg = load_config()["restoration"]
         zero = {"completed_px": 0, "ai_guess_px": 0, "open_tier_b_px": 0, "open_no_evidence_px": 0}

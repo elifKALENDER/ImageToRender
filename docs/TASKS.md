@@ -15,7 +15,7 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: T26 and T28 to T34 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
+- **After v0.1.0: T26 and T28 to T35 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
   failure analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`).
   Phase 3 has no open coding task; what is open is the author's manual input (see `docs/STATUS.md`).** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
@@ -764,6 +764,15 @@ window's donor row has not been used by a person yet. 173 tests.*
 `tests/test_target_review.py`.
 **Accept.** A named donor is placed by the next complete step and recorded as the expert's choice;
 removing the choice brings the automatic donor back.
+
+### T35. Own marking for a placement the expert rejected (added 2026-11-14)
+*Status: done 2026-11-14. The open damage in the box of a target whose placement the expert rejected is
+cross-hatched in `restoration.rejected_color` (violet) with its own legend line and count
+(`open_rejected_px` in `provenance.json`, a row in `report.html`); before, it was hatched red like "no
+evidence", which said the wrong thing: a fragment and a donor exist there, the expert did not accept that
+placement. s01 (run `20261114_170229`): 4,162 px in the two rejected boxes (`t_002`, `t_006`) moved from
+"no evidence" to "rejected"; completed images unchanged. 174 tests.*
+**Files.** `i2r/render.py`, `i2r/report.py`, `config.yaml`, `tests/test_render.py`.
 
 ---
 

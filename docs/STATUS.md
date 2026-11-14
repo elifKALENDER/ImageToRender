@@ -4,7 +4,7 @@
 > tamamlandı; yazar beş yerleştirmeyi inceledi (2 onay, 3 ret) ve ret notları üzerine kutu uzatma kuralı
 > (T33) eklendi. Şu an s01'de 7 A hedefi var: restorasyon görünümünde yalnızca onaylı sağ kemer (847
 > piksel) boyanıyor, dört pilaster "tahmin" olarak kararınızı bekliyor (ikisi yeni, ikisinin yerleşimi
-> değiştiği için eski kararı geçersiz), iki yerleştirme reddedildi; hasarın % 85'i için kanıt yok. Sizden
+> değiştiği için eski kararı geçersiz), iki yerleştirme reddedildi (mor çapraz tarama); hasarın % 80'i için kanıt yok. Sizden
 > beklenen: (1) dört pilasteri `tools/target_review.py` ile yeniden değerlendirmek, (2) cephe maskesi,
 > (3) `recovered_arch_001` kaydı, (4) lisansı belli bir fotoğraf. Bölüm 4'te komutlarıyla.
 
@@ -13,8 +13,8 @@
 | Date | 2026-11-14 |
 | Branch | `fix/failure-analysis`, ahead of `main` (`v0.1.0`); not merged, which is the author's decision |
 | Structures | **n = 1 building** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only so far |
-| Reference run | `outputs/s01_test_church/20261114_164027` (generative fill off, the author's decisions applied). Open `report.html` in it |
-| Tests | 173 pass (`python -m unittest discover tests`, no GPU) |
+| Reference run | `outputs/s01_test_church/20261114_170229` (generative fill off, the author's decisions applied). Open `report.html` in it |
+| Tests | 174 pass (`python -m unittest discover tests`, no GPU) |
 
 Statements marked **(guess)** are the assistant's reading, not a measurement.
 
@@ -48,8 +48,8 @@ Three things can be entered by hand, each with a tool:
 |---|---|---|
 | Completed (approved by the expert) | 847 px (0.8 % of the damage): `t_003` | the same |
 | Guesses | 4 targets withheld (boxes hatched orange) | 4 targets painted and marked, 6,394 px (6.4 %) |
-| Rejected by the expert | `t_002`, `t_006`: not painted | not painted |
-| No evidence, open | 84.6 % | 88.1 % |
+| Rejected by the expert | `t_002`, `t_006`: not painted, cross-hatched violet, 4.1 % | the same |
+| No evidence, open | 80.4 % | 83.9 % |
 | Outside the facade limit | 4.5 % | 4.7 % |
 
 20 targets: 7 tier A, 0 tier B, 13 tier C. In `v0.1.0` the same photograph gave 4,971 px in the
@@ -161,7 +161,6 @@ Ordered by how much they limit a presentable result.
 - **Effect.** No number here says how the method does elsewhere.
 
 ### Smaller points
-- A placement rejected by the expert is hatched like "no evidence"; it has no marking of its own.
 - The label "outside facade" is drawn only where it fits in the region; on s01 it does not, the legend
   carries it.
 - `restoration.include_tier_b` paints tier B without the guess marking (unchanged behaviour, off by
@@ -185,7 +184,7 @@ press "Use this donor", run the second command, then open the window again on th
 approve or reject the new placement.
 
 ```
-python tools/target_review.py --run outputs/s01_test_church/20261114_164027
+python tools/target_review.py --run outputs/s01_test_church/20261114_170229
 python run.py --structure s01_test_church --from complete --no-review
 ```
 
@@ -228,4 +227,3 @@ items below to build next.
 | B3 | paired-rhythm (bay) rule | P7 |
 | R-004a to c | seam and score thresholds on more data | P2 |
 | T27 rest | point 5 with the author's facade mask | P4; waits for step 2 |
-| — | marking for expert-rejected placements | smaller points |
