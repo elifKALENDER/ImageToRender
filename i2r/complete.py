@@ -607,6 +607,8 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
         do_it, why = rule(record, config)
         entry = {"target_id": record["target_id"], "tier": record["tier"], "kind": record["kind"],
                  "donor_id": record.get("donor_id"), "rule_reason": why}
+        if record.get("donor_choice"):
+            entry["donor_choice"] = record["donor_choice"]         # T34: the expert named this donor
         if not do_it:
             entry.update({"status": "not_completed", "method": "none", "pixels_changed": 0})
         elif not record.get("donor_id"):
@@ -724,16 +726,77 @@ def read_decisions(path) -> dict[str, dict]:
     return doc["decisions"]
 
 
-def load_decisions(run: "Run") -> dict[str, dict]:
-    """Expert decisions of the building, copied into the run folder so the run stays reproducible."""
+def read_donor_choices(path) -> dict[str, dict]:
+    """The expert's donor choices in ``path`` (its optional 'donors' object; {} when there is none)."""
+    if not path.is_file():
+        return {}
+    doc = read_json(path)
+    donors = doc.get("donors", {}) if isinstance(doc, dict) else None
+    if not isinstance(donors, dict):
+        raise ContractError(f"{path}: 'donors' must be an object")
+    for key, d in donors.items():
+        if not isinstance(d, dict) or not isinstance(d.get("donor_id"), str) or not isinstance(d.get("flipped"), bool):
+            raise ContractError(f"{path}: donor choice {key!r} needs 'donor_id' and 'flipped' (true or false)")
+    return donors
+
+
+def apply_donor_choices(records: list[dict], elements: list[dict],
+                        choices: dict[str, dict]) -> tuple[list[dict], list[str]]:
+    """Replace the automatic donor of a tier A target by the one the expert named (T34). Returns the
+    records (changed ones are copies; ``evidence.json`` keeps the automatic choice) and one message per
+    choice. A choice that cannot be used (unknown, rejected or other-class element, the target itself, a
+    target that is not tier A) is ignored with the reason: the automatic donor stays."""
+    by_id = {e["id"]: e for e in elements}
+    by_key = {decision_key(r): i for i, r in enumerate(records)}
+    out, messages = list(records), []
+    for key, choice in choices.items():
+        donor = by_id.get(choice["donor_id"])
+        index = by_key.get(key)
+        record = records[index] if index is not None else None
+        if record is None:
+            problem = "no such target in this run"
+        elif record["tier"] != "A":
+            problem = f"target is tier {record['tier']}, a donor can be chosen for tier A only"
+        elif donor is None:
+            problem = f"element {choice['donor_id']!r} is not in elements.json"
+        elif donor.get("rejected"):
+            problem = f"element {donor['id']} is rejected"
+        elif donor["class"] != record["class"]:
+            problem = f"element {donor['id']} is a {donor['class']}, the target a {record['class']}"
+        elif donor["id"] == record.get("element_id"):
+            problem = "an element cannot be its own donor"
+        elif not donor.get("mask_file"):
+            problem = f"element {donor['id']} has no mask"
+        else:
+            problem = None
+        if problem:
+            messages.append(f"donor choice for {key} ignored: {problem}")
+            continue
+        similarity = next((c["scores"].get("dinov2_cosine") for c in record.get("candidates", [])
+                           if c["donor_id"] == donor["id"] and bool(c["flipped"]) == choice["flipped"]), None)
+        info = {"donor_id": donor["id"], "donor_box": donor["box"], "flipped": choice["flipped"],
+                "similarity": similarity, "donor_damage_status": donor.get("damage_status"),
+                "automatic_donor_id": record["donor_id"], "automatic_flipped": record["flipped"],
+                "note": choice.get("note") or ""}
+        out[index] = {**record, "donor_id": donor["id"], "donor_box": donor["box"], "flipped": choice["flipped"],
+                      "donor_choice": info}
+        messages.append(f"{record['target_id']} ({key}): donor {donor['id']}{' flipped' if choice['flipped'] else ''} "
+                        f"chosen by the expert instead of {record['donor_id']}")
+    return out, messages
+
+
+def load_decisions(run: "Run") -> tuple[dict[str, dict], dict[str, dict]]:
+    """Expert decisions and donor choices of the building; the file is copied into the run folder so the
+    run stays reproducible."""
     source = run.structure_dir / DECISIONS_FILE
     decisions = read_decisions(source)
+    donors = read_donor_choices(source)
     copy = run.path(DECISIONS_FILE)
     if source.is_file():
         shutil.copy2(source, copy)
     elif copy.exists():
         copy.unlink()                              # copied from the run this one resumes
-    return decisions
+    return decisions, donors
 
 
 def run_step(run: "Run", opts: "argparse.Namespace") -> None:
@@ -755,9 +818,12 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     if rgb.shape[:2] != damage.shape:
         raise ContractError(f"{mask_path}: size differs from {run.image_path}")
     size = (rgb.shape[1], rgb.shape[0])
+    decisions, donor_choices = load_decisions(run)
+    records, messages = apply_donor_choices(records, elements, donor_choices)
+    for message in messages:
+        log.info("[complete] %s", message)
     donor_masks = load_donor_masks(run, elements, records, size)
     facade = load_facade_mask(run, evidence, damage.shape)
-    decisions = load_decisions(run)
     by_id = {r["target_id"]: r for r in records}
     targets_dir = run.path(TARGETS_DIR)
     if targets_dir.exists():

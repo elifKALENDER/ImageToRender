@@ -16,7 +16,7 @@ from PIL import Image
 
 import tests.test_complete as scene_module
 from i2r import complete, render
-from i2r.runio import REPO_ROOT, ContractError, read_json
+from i2r.runio import REPO_ROOT, ContractError, read_json, write_json
 from tests.test_complete import config, record, scene
 from tests.test_render import build_run
 from tools import target_review
@@ -151,6 +151,75 @@ class ReviewToolTest(unittest.TestCase):
         item = target_review.review_items(self.run.run_dir)[0]
         with self.assertRaises(ContractError):
             target_review.set_decision(self.run.structure_dir, item, "maybe", "", self.run.run_dir)
+
+    def add_second_donor(self) -> None:
+        """A second pilaster in the inventory (same pixels as the donor), which evidence did not pick."""
+        path = self.run.path("elements.json")
+        doc = read_json(path)
+        doc["elements"].append({**doc["elements"][0], "id": "donor2"})
+        write_json(path, doc)
+
+    def test_a_donor_named_by_the_expert_replaces_the_automatic_one(self) -> None:
+        self.add_second_donor()
+        item = target_review.review_items(self.run.run_dir)[0]
+        self.assertEqual([o["donor_id"] for o in item["options"]], ["donor", "donor2"])
+        self.assertEqual(target_review.review_items(self.run.run_dir)[1]["options"], [])   # tier B: no choice
+        target_review.set_decision(self.run.structure_dir, item, "reject", "other donor", self.run.run_dir)
+        target_review.set_donor(self.run.structure_dir, item, "donor2", None, " whole one ", self.run.run_dir)
+        doc = read_json(self.run.structure_dir / complete.DECISIONS_FILE)
+        self.assertEqual(doc["donors"]["element:target"]["donor_id"], "donor2")
+        self.assertIn("element:target", doc["decisions"])                          # the decision is kept
+        self.assertIn("not placed yet", target_review.describe(item, doc["decisions"], doc["donors"]))
+
+        complete.run_step(self.run, self.opts)
+        render.run_step(self.run, self.opts)
+        entry = read_json(self.run.path("completion.json"))["views"]["first_construction"]["targets"][0]
+        self.assertEqual(entry["donor_id"], "donor2")
+        self.assertEqual(entry["donor_choice"]["automatic_donor_id"], "donor")
+        self.assertEqual(entry["donor_choice"]["note"], "whole one")
+        self.assertNotEqual(entry["acceptance"].get("expert"), "reject")           # that decision named "donor"
+        prov = read_json(self.run.path("provenance.json"))["targets"][0]
+        self.assertEqual((prov["donor_id"], prov["donor_choice"]["automatic_donor_id"]), ("donor2", "donor"))
+        self.assertEqual(read_json(self.run.path("evidence.json"))["targets"][0]["donor_id"], "donor")
+        self.assertIn("chosen by the expert instead of", self.run.path("report.html").read_text(encoding="utf-8"))
+        item = target_review.review_items(self.run.run_dir)[0]
+        self.assertIn("chosen by the expert (automatic: donor)", target_review.describe(item, {}, doc["donors"]))
+
+        # back to the automatic donor
+        target_review.set_donor(self.run.structure_dir, item, None, None, "", self.run.run_dir)
+        self.assertNotIn("donors", read_json(self.run.structure_dir / complete.DECISIONS_FILE))
+        complete.run_step(self.run, self.opts)
+        entry = read_json(self.run.path("completion.json"))["views"]["first_construction"]["targets"][0]
+        self.assertEqual(entry["donor_id"], "donor")
+        self.assertNotIn("donor_choice", entry)
+
+    def test_an_element_that_cannot_be_a_donor_is_refused_by_the_tool(self) -> None:
+        item = target_review.review_items(self.run.run_dir)[0]
+        with self.assertRaises(ContractError):
+            target_review.set_donor(self.run.structure_dir, item, "target", None, "", self.run.run_dir)
+        with self.assertRaises(ContractError):
+            target_review.set_donor(self.run.structure_dir, item, "nobody", None, "", self.run.run_dir)
+
+    def test_an_unusable_choice_in_the_file_is_ignored_with_the_reason(self) -> None:
+        records = read_json(self.run.path("evidence.json"))["targets"]
+        elements = read_json(self.run.path("elements.json"))["elements"]
+        elements.append({**elements[0], "id": "arch", "class": "arch"})
+        elements.append({**elements[0], "id": "gone", "rejected": True})
+        for donor_id, word in (("arch", "is a arch"), ("gone", "rejected"), ("nobody", "not in elements.json"),
+                               ("target", "own donor")):
+            out, messages = complete.apply_donor_choices(
+                records, elements, {"element:target": {"donor_id": donor_id, "flipped": False}})
+            self.assertEqual(out[0]["donor_id"], "donor")
+            self.assertIn("ignored", messages[0])
+            self.assertIn(word, messages[0])
+        _, messages = complete.apply_donor_choices(records, elements, {"element:other": {"donor_id": "donor", "flipped": False}})
+        self.assertIn("no such target", messages[0])
+
+    def test_a_malformed_donor_choice_is_refused(self) -> None:
+        path = self.run.structure_dir / complete.DECISIONS_FILE
+        write_json(path, {"decisions": {}, "donors": {"element:target": {"donor_id": "donor"}}})
+        with self.assertRaises(ContractError):
+            complete.read_donor_choices(path)
 
     def test_tool_does_not_import_torch(self) -> None:
         code = "import sys; import tools.target_review; sys.exit(1 if 'torch' in sys.modules else 0)"

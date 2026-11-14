@@ -14,7 +14,7 @@
 | Branch | `fix/failure-analysis`, ahead of `main` (`v0.1.0`); not merged, which is the author's decision |
 | Structures | **n = 1 building** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only so far |
 | Reference run | `outputs/s01_test_church/20261114_164027` (generative fill off, the author's decisions applied). Open `report.html` in it |
-| Tests | 169 pass (`python -m unittest discover tests`, no GPU) |
+| Tests | 173 pass (`python -m unittest discover tests`, no GPU) |
 
 Statements marked **(guess)** are the assistant's reading, not a measurement.
 
@@ -40,7 +40,7 @@ Three things can be entered by hand, each with a tool:
 |---|---|---|
 | damage mask, facade mask | `tools/mask_editor.py` | `data/structures/<id>/damage_mask.png`, `facade_mask.png` |
 | element inventory | `tools/editor_adapter.py edit` | the run's `elements.json` |
-| approve / reject a placed donor | `tools/target_review.py` | `data/structures/<id>/target_decisions.json` |
+| approve / reject a placed donor, name another donor | `tools/target_review.py` | `data/structures/<id>/target_decisions.json` |
 
 ## 2. Result on s01 today
 
@@ -89,8 +89,10 @@ Ordered by how much they limit a presentable result.
   comparison images. The three pilaster placements are 18 to 27 px wide and hard to judge at this size,
   also for a person; `t_006` has the lowest seam agreement (-0.33). This is for the expert, not for a
   threshold.
-- **Needs the author.** Review the four pilasters (section 4, step 1). For `t_006` the review tool
-  cannot yet offer another donor (open item).
+- **Needs the author.** Review the four pilasters (section 4, step 1). For `t_006` another donor can
+  now be named in the review tool (T34); in a scripted trial `pilaster_010` scored 0.77 / seam 0.72 there
+  against 0.64 / -0.33 for the automatic `pilaster_011`. Which element is the right donor is the expert's
+  call.
 
 ### P3. The inventory has to be made by hand, and one record is wrong
 - **What.** Raw detection is not usable: on s01 52 % class-aware recall, every score below 0.06; on
@@ -166,7 +168,8 @@ Ordered by how much they limit a presentable result.
   default).
 - Run folders written before 2026-11-14 keep their old images and legends.
 - The review window was used by the author on 2026-11-14 (five decisions, with notes).
-- The review tool offers approve or reject only; choosing another donor for a target is not possible.
+- The donor row of the review window (T34) was stepped through by a script; it has not been used by a
+  person yet. The run folder `20261114_165810` holds that trial's donor choice; it is not a result.
 - The decision flow was run once end to end on s01 by a script (approve `t_003`, reject `t_002`, run,
   clear, run): the approved guess was completed in the restoration view, the rejected one withheld in
   both, and after clearing the images were byte-identical to before. The run folder `20261114_150837`
@@ -176,6 +179,10 @@ Ordered by how much they limit a presentable result.
 
 **Step 1 — decide on the four pilasters that wait (`t_001`, `t_004`, `t_005`, `t_007`).** Changes the
 result at once; no drawing needed. The earlier decisions on `t_002`, `t_003`, `t_006` still apply.
+
+For `t_006` (rejected because of its donor): pick another element in the donor row of the window and
+press "Use this donor", run the second command, then open the window again on the new run folder and
+approve or reject the new placement.
 
 ```
 python tools/target_review.py --run outputs/s01_test_church/20261114_164027
@@ -216,7 +223,6 @@ items below to build next.
 
 | ID | What | Why it is open |
 |---|---|---|
-| — | choose another donor for a target in the review tool (`t_006`) | P2; the alternatives are in `evidence.json` |
 | — | arch leg that stops short of the capital (`t_002`) | P5, P6 |
 | R5c | donor from another photograph of the building | P1; needs registration between photographs |
 | B3 | paired-rhythm (bay) rule | P7 |

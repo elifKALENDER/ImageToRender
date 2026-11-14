@@ -105,6 +105,11 @@ def target_block(entry: dict) -> str:
         "<div>Why a guess: " + (esc("; ".join(reasons)) if reasons else "&ndash; (passed the automatic tests)") + "</div>",
         f"<div>Expert decision: <b>{expert_text}</b></div>",
     ]
+    choice = entry.get("donor_choice")
+    if choice:
+        lines.insert(3, "<div class=meta>donor chosen by the expert instead of "
+                        f"<code>{esc(choice['automatic_donor_id'])}</code>"
+                        + (f" ({esc(choice['note'])})" if choice.get("note") else "") + "</div>")
     ext = entry.get("box_extension")
     if ext:
         lines.insert(3, f"<div class=meta>box extended at the {esc(ext['side'])} from {esc(entry.get('element_box'))} to "

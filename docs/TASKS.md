@@ -15,7 +15,7 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: T26 and T28 to T33 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
+- **After v0.1.0: T26 and T28 to T34 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
   failure analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`).
   Phase 3 has no open coding task; what is open is the author's manual input (see `docs/STATUS.md`).** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
@@ -743,6 +743,27 @@ the capital, so this is a matter of placement, not of box height. Synthetic test
 **Files.** `i2r/evidence.py`, `i2r/render.py`, `i2r/report.py`, `config.yaml`, `tests/test_evidence_a.py`.
 **Accept.** The four short pilasters of s01 get a full-height target box; elements whose strip is
 surviving stone, or that fit no neighbour at either end, keep their box.
+
+### T34. The expert names the donor (added 2026-11-14)
+*Status: done 2026-11-14. Asked for by the author after rejecting `t_006` ("the donor should be an intact
+pilaster"). `tools/target_review.py` lists, for a tier A target, every same-class element that is not
+rejected: the automatic candidates with their similarity first, then the ones the filters left out with
+the reason. The window has a donor row (list, crop of the picked element, "Use this donor", "Automatic
+donor"); without a window: `--options`, `--donor TARGET ELEMENT [--flip yes|no]`, `--auto-donor`. The
+choice is stored under `donors` in `target_decisions.json` and applied by the next complete step
+(`complete.apply_donor_choices`); `evidence.json` keeps the automatic donor, the completion entry and
+`provenance.json` carry `donor_choice` with both. The new placement is judged like any other and is
+approved or rejected in a second look; an earlier decision on the old donor is stale. A choice that
+cannot be used is ignored with the reason in the log. Tier B slots have no choice.
+Trial on s01 by a script (run `20261114_165810`, not a result; the author's file was restored after it):
+`pilaster_010` named for `t_006` gave alignment score 0.77 and seam 0.72, against 0.64 and -0.33 for the
+automatic `pilaster_011`; the window was stepped through all 7 targets and every donor option. The
+window's donor row has not been used by a person yet. 173 tests.*
+**What.** Approve or reject is not enough when the expert accepts the target but not the donor.
+**Files.** `tools/target_review.py`, `i2r/complete.py`, `i2r/render.py`, `i2r/report.py`,
+`tests/test_target_review.py`.
+**Accept.** A named donor is placed by the next complete step and recorded as the expert's choice;
+removing the choice brings the automatic donor back.
 
 ---
 

@@ -390,6 +390,12 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
                 acceptance[view] = e.get("acceptance")
                 placement[view] = {"placement_box": e.get("placement_box"), "donor_px": e.get("donor_px"),
                                    "panel": e.get("panel_file")}
+        # T34: a donor named by the expert replaces the automatic one of evidence.json in the record
+        choice = next((e["donor_choice"] for by_id in per_view.values()
+                       if (e := by_id.get(r["target_id"])) and e.get("donor_choice")), None)
+        if choice:
+            r = {**r, "donor_id": choice["donor_id"], "donor_box": choice["donor_box"],
+                 "flipped": choice["flipped"], "similarity": choice["similarity"]}
         entries.append({
             "target_id": r["target_id"],
             "kind": r["kind"],
@@ -403,6 +409,7 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
             "area_px": r.get("area_px"),
             "donor_id": r["donor_id"],
             "donor_box": r["donor_box"],
+            "donor_choice": choice,
             "similarity": r.get("similarity"),
             "confidence": r["confidence"],
             "alternatives": r.get("alternatives", []),
