@@ -1,0 +1,76 @@
+{
+  "structure_id": "s01_test_church",
+  "about": "Expert decisions per target; written by tools/target_review.py, read by the complete step. A decision applies only to the placement it names.",
+  "decisions": {
+    "element:pilaster_013": {
+      "decision": "reject",
+      "note": "bu plaster duvara kısa yerlkeştriliyor bunun dibi diğer plasterlarla aynı hizaya inmeli aslında",
+      "placement": {
+        "donor_id": "pilaster_010",
+        "flipped": true,
+        "scale": 1.06,
+        "dx": -2,
+        "dy": 13
+      },
+      "target_id_at_decision": "t_001",
+      "run": "outputs/s01_test_church/20261114_150843",
+      "decided_at": "2026-11-14T15:32:09+03:00"
+    },
+    "element:recovered_arch_003": {
+      "decision": "reject",
+      "note": "Bu uç plasterıın başlığına kadar inmeli",
+      "placement": {
+        "donor_id": "arch_005",
+        "flipped": false,
+        "scale": 1.0,
+        "dx": -3,
+        "dy": 4
+      },
+      "target_id_at_decision": "t_002",
+      "run": "outputs/s01_test_church/20261114_150843",
+      "decided_at": "2026-11-14T15:33:01+03:00"
+    },
+    "element:recovered_arch_001": {
+      "decision": "approve",
+      "note": "",
+      "placement": {
+        "donor_id": "arch_005",
+        "flipped": true,
+        "scale": 1.06,
+        "dx": 4,
+        "dy": 7
+      },
+      "target_id_at_decision": "t_003",
+      "run": "outputs/s01_test_church/20261114_150843",
+      "decided_at": "2026-11-14T15:33:19+03:00"
+    },
+    "element:recovered_pilaster_022": {
+      "decision": "reject",
+      "note": "donor sağlam bir plaster olmalı",
+      "placement": {
+        "donor_id": "pilaster_011",
+        "flipped": false,
+        "scale": 1.06,
+        "dx": -2,
+        "dy": -4
+      },
+      "target_id_at_decision": "t_006",
+      "run": "outputs/s01_test_church/20261114_150843",
+      "decided_at": "2026-11-14T15:35:04+03:00"
+    },
+    "element:expert_pilaster_017": {
+      "decision": "approve",
+      "note": "",
+      "placement": {
+        "donor_id": "pilaster_010",
+        "flipped": false,
+        "scale": 1.0,
+        "dx": 2,
+        "dy": 8
+      },
+      "target_id_at_decision": "t_007",
+      "run": "outputs/s01_test_church/20261114_150843",
+      "decided_at": "2026-11-14T15:35:52+03:00"
+    }
+  }
+}

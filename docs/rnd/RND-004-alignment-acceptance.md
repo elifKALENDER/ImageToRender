@@ -105,6 +105,31 @@ Run `outputs/s01_test_church/20261114_130553` (generative fill off).
   finding. `t_001` misses the seam threshold by 0.01.
 - `t_002` is the only target that passes both tests and the only one that is not on a bound.
 
+## The expert's decisions on the same five (2026-11-14)
+
+The author reviewed the five placements in `tools/target_review.py`
+(`data/structures/s01_test_church/target_decisions.json`; applied in run `20261114_153648`).
+
+| Target | Automatic | Expert | Expert's note (translated) |
+|---|---|---|---|
+| t_001 | guess | reject | placed too short against the wall; its foot should come down to the level of the other pilasters |
+| t_002 | accepted | **reject** | this end should come down to the pilaster's capital |
+| t_003 | guess | **approve** | |
+| t_006 | guess | reject | the donor should be an intact pilaster |
+| t_007 | guess | **approve** | |
+
+- The tests and the expert agree on 2 of 5 (`t_001`, `t_006`) and disagree on 3: the only placement the
+  tests accepted was rejected, and two they held back were approved. With n = 5 this is not a rate, but
+  it does not support the thresholds either: the score ordered these five almost the wrong way round
+  (`t_002` 0.85 rejected; `t_003` 0.71 and `t_007` 0.69 approved).
+- None of the three rejections is about alignment as the tests measure it. Two are about **extent**: the
+  completed piece ends too early (`t_001`: the target box is the fragment's box, 161 px high, where the
+  row's pilasters are about 200 px, the case of R-029a; `t_002`: the arch leg does not reach the capital).
+  One is about the **choice of donor** (`t_006`: `pilaster_011` counts as intact for the pipeline, the
+  expert does not accept it as a donor).
+- Result with the decisions: both views complete `t_003` and `t_007`, 1,598 px (1.6 % of the damage);
+  nothing is left as a guess.
+
 ## Wider search
 
 `refine_shift_frac` 0.20 and `refine_scales` 0.82 to 1.18 in steps of 0.06 (`eval_20261114_125645`):
