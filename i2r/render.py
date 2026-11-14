@@ -19,6 +19,8 @@ Once per run:
                          (first-construction view only) generative pixels in magenta over the faded
                          photograph, open damage hatched; empty of magenta while the generative fill is
                          off. Delivered with first_construction.png, never apart (§5.4).
+    report.html          one page with the views, the figures and every placed donor (i2r/report.py);
+                         input.png is the photograph it shows
     targets_overlay.png  elements (thin, by class) and targets (by tier), with the bar
     legend.png           the bar alone
 
@@ -37,6 +39,7 @@ from PIL import Image
 
 from i2r.detect import class_color, load_elements
 from i2r.runio import ContractError, read_json, write_json
+from i2r.report import write_report
 from i2r.complete import GENERATIVE_LABEL_NAME, GUESS, OUTSIDE_FACADE, REJECTED, load_facade_mask
 
 if TYPE_CHECKING:
@@ -498,7 +501,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         log.info("[render] %s: %s.png and %s_source_map.png | %s", view, view, view, counts)
 
     entries = provenance_entries(records, completion)
-    write_json(run.path(PROVENANCE_FILE), {
+    provenance = {
         "statement": rcfg["label"],
         "structure_id": run.structure_id,
         "run_id": run.meta.get("run_id"),
@@ -520,7 +523,9 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         "generative_fill": {v: {"method": "generative", "donor_id": None, "evidence": "conjecture",
                                 **{k: rep["generative"][k] for k in rep["generative"] if k != "debug"}}
                             for v, rep in completion["views"].items() if rep.get("generative")},
-    })
+    }
+    write_json(run.path(PROVENANCE_FILE), provenance)
+    write_report(run, provenance, int(damage.sum()))
     Image.fromarray(with_bar(targets_overlay(photo, elements, records, float(rcfg["text_scale"])), rcfg, None)).save(run.path(OVERLAY))
     Image.fromarray(bar(photo.shape[1], rcfg, None)).save(run.path(LEGEND))
     summary = {v: sum(1 for e in entries if e["views"].get(v) == "completed") for v in rendered}

@@ -6,6 +6,7 @@ support, never a restoration decision. The owner is an architect and writes in T
 
 ## Read first
 - `docs/TASKS.md`: ordered task list; its "Before you start" section names the next task (none open in Phase 3; see `docs/STATUS.md`).
+- `docs/STATUS.md`: state after Phase 3 (2026-11-14): problems with causes, and the author's manual steps in order.
 - `docs/FAILURE_ANALYSIS.md`: the author's visual review of the s01 output and the causes found (2026-11-12); source of T26 to T30.
 - `docs/ARCHITECTURE.md`: design (6 modules detect, review, damage, evidence, complete, render; evidence tiers A, B, C).
 - `docs/EXPERIMENTS.md`: what the old experiments were. `archive/README.md`: which run each archived script produced.
@@ -34,7 +35,7 @@ support, never a restoration decision. The owner is an architect and writes in T
 - Decide on sensible defaults and say what you chose. Ask only for what is the author's to decide (building identity, licence, merging into main, damage mask for s02).
 
 ## Layout
-`run.py` entry point; `config.yaml`; `i2r/` modules (`runio`, `detect`, `review`, `damage`, `evidence`, `complete`, `render`); `tools/` (`check_env`, `inventory_editor`, `editor_adapter`, `mask_editor`, `refine_masks`, `synthetic_damage`); `evaluation/evaluate.py`; `tests/`; `data/structures/<id>/`; `docs/`; `archive/`; `outputs/` and `assets/` (local, untracked).
+`run.py` entry point; `config.yaml`; `i2r/` modules (`runio`, `detect`, `review`, `damage`, `evidence`, `complete`, `render`, `report`); `tools/` (`check_env`, `inventory_editor`, `editor_adapter`, `mask_editor`, `refine_masks`, `synthetic_damage`, `target_review`); `evaluation/evaluate.py`; `tests/`; `data/structures/<id>/`; `docs/`; `archive/`; `outputs/` and `assets/` (local, untracked).
 
 ## Current state
 - Done: T1 to T21 plus T16b (detect OWL-ViT + SAM, review, editor adapter, mask editor, damage, evidence tiers A/B/C, donor transfer, restoration view, first-construction view, `tools/refine_masks.py`, synthetic damage `tools/synthetic_damage.py` + `evaluation/evaluate.py completion`). All six `run.py` steps are real. 130 tests pass.
@@ -59,7 +60,8 @@ support, never a restoration decision. The owner is an architect and writes in T
 - T29 done (2026-11-14): a same-class element standing in a B1 gap off the implied positions stops that gap (`evidence.gap_intruders`, no new setting); every slot records `nearest_same_class`; tier B is painted as a guess in the first-construction view (`first_construction.tier_b_is_guess`). s01 now has **0 tier B targets** (21 targets: 5 A, 16 C); first construction changes 4,971 px (1 accepted + 4 tier A guesses) and differs from the restoration view only by the guesses. Synthetic: background 4/4 left C, full 1/12, partial 9/12, preservation 0. Left out on purpose: tier A second chance for half-height fragments (R-029a). 154 tests. Run of T29: `outputs/s01_test_church/20261114_144206`.
 - T30 done (2026-11-14): `placement_box`, `donor_px` shares and `targets/<target_id>_<view>.png` panels (photograph, mask, donor as placed, result); outputs byte-identical.
 - T31 done (2026-11-14, added task): expert decision per target. `python tools/target_review.py --run <run>` (window, or `--list` / `--approve` / `--reject` / `--clear`), stored in `data/structures/<id>/target_decisions.json` (tracked), applied by the next complete step; a decision is tied to one placement and goes stale when it changes. No decision entered for s01 yet (the author's). 163 tests.
-- Current s01 reference: `outputs/s01_test_church/20261114_150113` (fill off, newest folder). After entering decisions: `python run.py --structure s01_test_church --from complete --no-review`.
+- T32 done (2026-11-14, added task): the render step writes `report.html` + `input.png` per run (`i2r/report.py`): views, counts, every placed donor with its panel, open targets, commands for the expert. 164 tests.
+- Current s01 reference: `outputs/s01_test_church/20261114_150757` (fill off, newest folder; open its `report.html`). After entering decisions: `python run.py --structure s01_test_church --from complete --no-review`.
 - Status and open manual work for the author: `docs/STATUS.md`.
 - Known weaknesses (after T20): alignment scale hits the search bounds; low NCC on pilasters; the size filter blocks `recovered_pilaster_046`, `recovered_pilaster_020` and, in the synthetic test, `recovered_arch_025` and `expert_cornice_021`; `min_similarity` cannot be tested without negatives (R-002a); the two B1 slots (x 343-366, 400-423) are doubtful and B1 made a slot on plain wall in `background__bg01`.
 - Scale test (2026-11-12): `s01_test_church_upscaled` (Upscayl 3x, AI upscaler, not a new photo; see its `SOURCE.md`) showed that pixel settings did not follow image size; fixed the same day by `scale` in `config.yaml` (`runio.apply_pixel_scale`, reference 904 px; s01 outputs byte-identical). After the fix the copy gives the same targets, tiers and markings as s01; only 2 of 5 donors differ (upscaler texture). Not usable for calibration.

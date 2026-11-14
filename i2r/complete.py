@@ -364,6 +364,10 @@ def target_panel(rgb: np.ndarray, damage: np.ndarray, result: np.ndarray, record
     ctx = int(ccfg["crop_context_px"])
     height, width = damage.shape
     crop = [max(0, wx1 - ctx), max(0, wy1 - ctx), min(width, wx2 + ctx), min(height, wy2 + ctx)]
+    # a tall, narrow target (a pilaster) gets more of its neighbours, or the panel is too thin to judge
+    lack = int(np.ceil(((crop[3] - crop[1]) * float(ccfg["crop_min_aspect"]) - (crop[2] - crop[0])) / 2))
+    if lack > 0:
+        crop[0], crop[2] = max(0, crop[0] - lack), min(width, crop[2] + lack)
     cx1, cy1, cx2, cy2 = crop
     patch, usable = donor_patch(rgb, damage, donor_mask, record["donor_box"], bool(record["flipped"]))
     al = entry["alignment"]

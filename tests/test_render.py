@@ -120,6 +120,18 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(by_id["t_002"]["views"], {"restoration": "not_completed"})
         self.assertEqual(by_id["t_003"]["method"], "none")
 
+    def test_report_page(self) -> None:
+        run = self.render(views=("restoration", "first_construction"))
+        page = run.path("report.html").read_text(encoding="utf-8")
+        self.assertTrue(run.path("input.png").is_file())
+        self.assertIn("AI proposal, not a restoration decision", page)
+        for text in ("t_001", "t_002", 'src="restoration.png"', 'src="first_construction.png"', 'src="input.png"',
+                     "targets/t_001_first_construction.png", "tools/target_review.py", "guess, needs expert"):
+            self.assertIn(text, page, text)
+        self.assertNotIn("http://", page)                           # self-contained: no external resource
+        self.assertNotIn("https://", page)
+        self.assertNotIn("<script", page)
+
     def test_every_changed_pixel_has_a_completed_source(self) -> None:
         run = self.render()
         photo = np.asarray(Image.open(run.image_path).convert("RGB"))

@@ -243,6 +243,7 @@ complete:
   # this margin, shown at this height. Display only.
   crop_context_px: 12
   crop_panel_height_px: 300
+  crop_min_aspect: 0.6               # the crop is widened until width / height reaches this
 
 restoration:
   include_tier_b: false             # Venice Charter: stop where conjecture begins (§5.3, D4)

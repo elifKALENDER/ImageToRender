@@ -15,7 +15,7 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: T26 and T28 to T31 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
+- **After v0.1.0: T26 and T28 to T32 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
   failure analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`).
   Phase 3 has no open coding task; what is open is the author's manual input (see `docs/STATUS.md`).** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
@@ -532,7 +532,7 @@ run the demo on s01. Fix anything missing. Merge to `main` and tag `v0.1.0`.
 
 ## Phase 3 — Fixes from the failure analysis (after v0.1.0)
 
-*Status: T26, T28, T29, T30 done, T31 added and done; T27 mechanism done, one acceptance item open (author). Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
+*Status: T26, T28, T29, T30 done, T31 and T32 added and done; T27 mechanism done, one acceptance item open (author). Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
 visual review of the s01 first-construction output with the generative fill on. Order set by the author:
 T26 (legend and labels), T27 (mask reaching the ground), T28 (alignment acceptance), T29 (slot rule), T30
 (logging). Section numbers such as "§8.3" in these five tasks refer to `docs/FAILURE_ANALYSIS.md`.
@@ -707,6 +707,18 @@ its own. 163 tests (the window was opened and stepped through by a script, not u
 **Files.** `tools/target_review.py`, `i2r/complete.py`, `i2r/render.py`, `.gitignore`, `tests/test_target_review.py`.
 **Accept.** An approved guess is completed in the restoration view; a rejected accepted placement is
 withheld in both views; a decision for another placement changes nothing; all three tested.
+
+### T32. Run report page (added 2026-11-14)
+*Status: done 2026-11-14. The render step writes `report.html` (`i2r/report.py`) and `input.png` into
+the run folder: the views, the pixel counts by basis and their share of the damage, every placed donor
+with figures, verdict, expert decision and comparison image, the open targets with their reasons, the
+commands for the expert, the limits. One file, relative links, no script, no external resource. It shows
+the photograph, so it stays local for buildings whose image has no licence. Checked on s01 by a headless
+browser screenshot. 164 tests. Status of the whole and the author's manual work: `docs/STATUS.md`.*
+**What.** A page a person can open and show, built only from `provenance.json`.
+**Files.** `i2r/report.py`, `i2r/render.py`, `tests/test_render.py`.
+**Accept.** The page names every placed target, links the view images and panels of the same folder and
+loads nothing from outside.
 
 ---
 
