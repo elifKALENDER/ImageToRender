@@ -15,8 +15,8 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: the next task is T26** (Phase 3, fixes from `docs/FAILURE_ANALYSIS.md`); T26 to T30 are
-  open and none is started. Author decision
+- **After v0.1.0: T26 is done (2026-11-14); the next task is T27** (Phase 3, fixes from
+  `docs/FAILURE_ANALYSIS.md`); T27 to T30 are open and none is started. Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
   skipped. Everything is developed, tuned and reported on s01 (n = 1 building). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
@@ -531,13 +531,30 @@ run the demo on s01. Fix anything missing. Merge to `main` and tag `v0.1.0`.
 
 ## Phase 3 — Fixes from the failure analysis (after v0.1.0)
 
-*Status: T26 to T30 open; none started. Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
+*Status: T26 done; T27 to T30 open, none started. Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
 visual review of the s01 first-construction output with the generative fill on. Order set by the author:
 T26 (legend and labels), T27 (mask reaching the ground), T28 (alignment acceptance), T29 (slot rule), T30
 (logging). Section numbers such as "§8.3" in these five tasks refer to `docs/FAILURE_ANALYSIS.md`.
 Size: S = under one session, M = one session, L = more than one. Work on a new branch from `main`.*
 
 ### T26. Honest marking of generative pixels and legend (a)
+*Status: done 2026-11-14 (branch `fix/failure-analysis`). `mark_view` takes the generative label: those
+pixels get no tone shift and no donor outline, but diagonal stripes blended towards the conjecture colour
+and a dashed inner outline (`first_construction.guess_*`, display choices, scaled with the image), plus
+an "AI guess" label. `generative_display: separate` (default): `first_construction.png` and its source
+map are rendered without the generated pixels and the guess is written to
+`first_construction_ai_guess.png` under a banner; `inline`: the marked pixels stay in the view. The
+banner is a strip above the photograph, not text over it, so pixels outside the damage mask still equal
+the photograph. `view_legend` and the source-map legend list only what occurs; `provenance.json` records
+`generative_display`, `ai_guess_image` and the guess image's pixel counts; `run_meta.json` ›
+`steps.complete.generative_fill` has `enabled`, `ran`, `pixels_changed`. `completed_px` now counts donor
+pixels only (`ai_guess_px` is separate). Checked on s01 (n = 1) by re-rendering copies of the two runs,
+no new generation: with `separate`, `first_construction.png` of the generative run `20261112_142811` is
+byte-identical to that of `20261112_141348` (fill off); `restoration.png` is byte-identical before and
+after; with `inline`, 88,991 px are marked as AI guess and the legend has no "hatched" line. Not
+byte-identical to before: the source maps of runs without generated pixels (their legend lost the
+"generative" item). The run folders in `outputs/` written before this task keep the old images. 136
+tests (6 new; the reference-run test is skipped where the local run is absent).*
 **What.** In `render.mark_view` treat the generative label separately from donor labels: no donor
 outline or tone shift; marking per `first_construction.generative_display` (§10; implement `separate`
 and `inline`). `view_legend` lists an item only when its pixel count is above 0, including "hatched: no

@@ -5,7 +5,7 @@ Research/portfolio repo. Input: a photograph of a damaged historical building. O
 support, never a restoration decision. The owner is an architect and writes in Turkish.
 
 ## Read first
-- `docs/TASKS.md`: ordered task list; its "Before you start" section names the next task (T26, Phase 3).
+- `docs/TASKS.md`: ordered task list; its "Before you start" section names the next task (T27, Phase 3).
 - `docs/FAILURE_ANALYSIS.md`: the author's visual review of the s01 output and the causes found (2026-11-12); source of T26 to T30.
 - `docs/ARCHITECTURE.md`: design (6 modules detect, review, damage, evidence, complete, render; evidence tiers A, B, C).
 - `docs/EXPERIMENTS.md`: what the old experiments were. `archive/README.md`: which run each archived script produced.
@@ -50,7 +50,8 @@ support, never a restoration decision. The owner is an architect and writes in T
 - T24 done (2026-11-12): README rewritten (English, Turkish summary, n = 1 results, limitations); no example images because the test photographs have no known licence.
 - T25 done (2026-11-12): fresh clone reproduces the reference run byte for byte; `main` fast-forwarded and tagged `v0.1.0` (author decision). Local branch `backup-before-rewrite` deleted; its 3 commits are kept as the local tag `backup-before-rewrite` (not pushed). Further work goes on a new branch from `main`.
 - Failure analysis (2026-11-12, `docs/FAILURE_ANALYSIS.md`): the author reviewed `outputs/s01_test_church/20261112_142811/first_construction.png`, which is the generative-fill trial and also the newest s01 run folder (use `20261112_141348` as the reference, fill off). Main findings: generative pixels are outlined and legended as donor pixels (bug from T21); the damage mask reaches the ground; `recovered_arch_001` does not describe the standing arch; 4 of 5 tier A alignments end on a search bound and nothing rejects a poor one; B1 put a slot beside a surviving pilaster fragment.
-- Next: **T26** (not started; the author will say when). Then T27 to T30 in that order.
+- T26 done (2026-11-14, branch `fix/failure-analysis`, see its status note in `docs/TASKS.md`): generated pixels are no longer outlined or legended as donor pixels; `first_construction.generative_display` `separate` (default) keeps them out of `first_construction.png` and writes `first_construction_ai_guess.png`; legends list only what occurs; `run_meta.json` records whether the pass ran. 136 tests. Run folders written before T26 keep the old images.
+- Next: **T27** (not started). It opens with a choice (author's `facade_mask.png` / ground line, or the convex hull of the element boxes) and needs the author to redraw or confirm the lower-left lobe of the s01 mask. Then T28 to T30 in that order.
 - Known weaknesses (after T20): alignment scale hits the search bounds; low NCC on pilasters; the size filter blocks `recovered_pilaster_046`, `recovered_pilaster_020` and, in the synthetic test, `recovered_arch_025` and `expert_cornice_021`; `min_similarity` cannot be tested without negatives (R-002a); the two B1 slots (x 343-366, 400-423) are doubtful and B1 made a slot on plain wall in `background__bg01`.
 - Scale test (2026-11-12): `s01_test_church_upscaled` (Upscayl 3x, AI upscaler, not a new photo; see its `SOURCE.md`) showed that pixel settings did not follow image size; fixed the same day by `scale` in `config.yaml` (`runio.apply_pixel_scale`, reference 904 px; s01 outputs byte-identical). After the fix the copy gives the same targets, tiers and markings as s01; only 2 of 5 donors differ (upscaler texture). Not usable for calibration.
 

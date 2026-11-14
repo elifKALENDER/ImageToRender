@@ -554,3 +554,10 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     run.meta["steps"].setdefault("complete", {})["views"] = {
         v: {k: r[k] for k in ("completed", "pixels_changed")} for v, r in report["views"].items() if "completed" in r
     }
+    # Whether the generative pass ran, so a run folder with generated pixels can be told apart (T26).
+    gen = {v: r["generative"] for v, r in report["views"].items() if r.get("generative")}
+    run.meta["steps"]["complete"]["generative_fill"] = {
+        "enabled": bool(run.config["first_construction"]["generative"]),
+        "ran": bool(gen),
+        "pixels_changed": {v: g["pixels_changed"] for v, g in gen.items()},
+    }

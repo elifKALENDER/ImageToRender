@@ -8,6 +8,11 @@ Per view <v> that the complete step produced:
                          "AI proposal, not a restoration decision" and the legend.
     <v>_source_map.png   every changed pixel coloured by method and tier, with target IDs; the rest of
                          the photograph in faded grey. Same bar.
+    <v>_ai_guess.png     only when the generative pass ran and first_construction.generative_display is
+                         "separate" (T26): the view with the generated pixels, striped and dash-outlined
+                         in the conjecture colour, under a banner. <v>.png then holds no generated pixel.
+                         With "inline" the generated pixels stay in <v>.png with the same marking. They
+                         are never outlined or tone-shifted like donor pixels.
 Once per run:
     provenance.json      one entry per evidence target (§5.6) with its status in every view
     first_construction_conjecture_overlay.png
@@ -93,20 +98,49 @@ def put_label(layer: np.ndarray, text: str, region: np.ndarray, colour: tuple[in
     return True
 
 
+def dash_pattern(shape: tuple[int, int], dash: int) -> np.ndarray:
+    """Checkerboard of ``dash`` px cells: a line drawn through it comes out dashed in any direction."""
+    h, w = shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    d = max(1, dash)
+    return ((xx // d + yy // d) % 2) == 0
+
+
 def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, records: list[dict],
-              statuses: dict[str, str], rcfg: dict) -> tuple[np.ndarray, dict[str, int]]:
-    """The marked photograph (same size) and pixel counts per marking."""
+              statuses: dict[str, str], rcfg: dict, generative_label: int | None = None,
+              gcfg: dict | None = None) -> tuple[np.ndarray, dict[str, int]]:
+    """The marked photograph (same size) and pixel counts per marking.
+
+    Pixels of ``generative_label`` are an AI guess, not a donor completion: they get no tone shift and no
+    donor outline, but stripes and a dashed outline in the conjecture colour (``gcfg`` =
+    config ``first_construction``, the ``guess_*`` keys)."""
     damage_b = damage > 0
     changed = labels > 0
+    guess = (labels == int(generative_label)) if generative_label else np.zeros_like(changed)
+    donor = changed & ~guess
     layer = completed.astype(np.float32).copy()
 
-    # completed pixels: tone shift towards white, then a thin inner outline per target
+    # donor-completed pixels: tone shift towards white, then a thin inner outline per target
     t = float(rcfg["tone_shift"])
-    layer[changed] = layer[changed] + (255.0 - layer[changed]) * t
+    layer[donor] = layer[donor] + (255.0 - layer[donor]) * t
     outline = np.zeros_like(changed)
-    for value in np.unique(labels[changed]):
+    for value in np.unique(labels[donor]):
         outline |= inner_outline(labels == value, int(rcfg["outline_px"]))
     layer[outline] = rcfg["outline_color"]
+
+    # generated pixels: stripes blended towards the conjecture colour and a dashed inner outline
+    guess_marks = np.zeros_like(changed)
+    if guess.any():
+        if gcfg is None:
+            raise ContractError("mark_view: a generative label needs the first_construction settings")
+        stripes = guess & hatch_pattern(damage.shape, int(gcfg["guess_stripe_spacing_px"]),
+                                        width=int(gcfg["guess_stripe_width_px"]))
+        a = float(gcfg["guess_stripe_alpha"])
+        layer[stripes] = layer[stripes] * (1.0 - a) + np.asarray(CONJECTURE_COLOUR, np.float32) * a
+        dashes = inner_outline(guess, int(gcfg["guess_outline_px"])) & dash_pattern(damage.shape,
+                                                                                   int(gcfg["guess_dash_px"]))
+        layer[dashes] = CONJECTURE_COLOUR
+        guess_marks = stripes | dashes
 
     # open areas: B targets not completed, then everything else still damaged
     open_b = np.zeros_like(damage_b)
@@ -133,10 +167,13 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
             labelled += put_label(layer, "B: implied", open_b & in_box, (255, 255, 255), float(rcfg["text_scale"]))
         elif r["kind"] == "uncovered_region":
             labelled += put_label(layer, "no evidence", open_c & in_box, (255, 255, 255), float(rcfg["text_scale"]))
+    if guess.any():
+        labelled += put_label(layer, "AI guess", guess, (255, 255, 255), float(rcfg["text_scale"]))
 
     out = completed.copy()
     out[damage_b] = layer[damage_b]          # markings live inside the damage mask only
-    counts = {"completed_px": int(changed.sum()), "outline_px": int(outline.sum()),
+    counts = {"completed_px": int(donor.sum()), "outline_px": int(outline.sum()),
+              "ai_guess_px": int(guess.sum()), "ai_guess_marks_px": int(guess_marks.sum()),
               "open_tier_b_px": int(open_b.sum()), "open_no_evidence_px": int(open_c.sum()),
               "labels_drawn": int(labelled)}
     return out, counts
@@ -176,11 +213,13 @@ def targets_overlay(photo: np.ndarray, elements: list[dict], records: list[dict]
     return out
 
 
-SOURCE_MAP_LEGEND = [
-    (TIER_COLOUR["A"], "donor transfer, tier A (direct)"),
-    (TIER_COLOUR["B"], "donor transfer, tier B (positional)"),
-    ((200, 60, 200), "generative (conjecture)"),
-]
+def source_map_legend(generative: bool) -> list:
+    """Legend of a source map; the generative item only when the map holds generated pixels."""
+    items = [(TIER_COLOUR["A"], "donor transfer, tier A (direct)"),
+             (TIER_COLOUR["B"], "donor transfer, tier B (positional)")]
+    if generative:
+        items.append((CONJECTURE_COLOUR, "generative (AI guess, no evidence)"))
+    return items
 
 
 def bar(width: int, rcfg: dict, view: str | None, items: list | None = None) -> np.ndarray:
@@ -194,7 +233,7 @@ def bar(width: int, rcfg: dict, view: str | None, items: list | None = None) -> 
     out = np.full((u(22) + u(20) * 4, width, 3), 20, np.uint8)     # room for up to four legend lines
     title = rcfg["label"] + (f" | {view.replace('_', ' ')} view" if view else "")
     cv2.putText(out, title, (u(6), u(16)), FONT, 0.45 * ts, (255, 255, 255), thick, cv2.LINE_AA)
-    items = items or [
+    items = items if items is not None else [
         ((240, 240, 240), "completed from a donor (outlined)"),
         (tuple(rcfg["hatch_color_b"]), "hatched: B, position implied, not restored"),
         (tuple(rcfg["hatch_color"]), "hatched: no evidence"),
@@ -221,12 +260,30 @@ def conjecture_legend(rcfg: dict) -> list:
 
 
 def view_legend(rcfg: dict, counts: dict[str, int]) -> list:
-    """Legend of one marked view: only the markings that occur in it."""
-    items = [((240, 240, 240), "completed from a donor (outlined)")]
+    """Legend of one marked view: only the markings that occur in it (pixel count above 0)."""
+    items = []
+    if counts["completed_px"]:
+        items.append(((240, 240, 240), "completed from a donor (outlined)"))
+    if counts.get("ai_guess_px"):
+        items.append((CONJECTURE_COLOUR, AI_GUESS_LEGEND))
     if counts["open_tier_b_px"]:
         items.append((tuple(rcfg["hatch_color_b"]), "hatched: B, position implied, not restored"))
-    items.append((tuple(rcfg["hatch_color"]), "hatched: no evidence"))
+    if counts["open_no_evidence_px"]:
+        items.append((tuple(rcfg["hatch_color"]), "hatched: no evidence"))
     return items
+
+
+AI_GUESS_LEGEND = "striped: AI guess (generative), no evidence"
+AI_GUESS_BANNER = "AI GUESS: no evidence in the photograph"
+GENERATIVE_DISPLAYS = ("separate", "inline")
+
+
+def banner(width: int, text: str, ts: float) -> np.ndarray:
+    """Strip in the conjecture colour placed above the AI-guess image."""
+    out = np.full((int(round(24 * ts)), width, 3), CONJECTURE_COLOUR, np.uint8)
+    cv2.putText(out, text, (int(round(6 * ts)), int(round(17 * ts))), FONT, 0.5 * ts, (255, 255, 255),
+                text_thickness(ts), cv2.LINE_AA)
+    return out
 
 
 def conjecture_overlay(photo: np.ndarray, damage: np.ndarray, labels: np.ndarray, report: dict,
@@ -322,8 +379,14 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     photo = np.asarray(Image.open(run.image_path).convert("RGB"))
     damage = (np.asarray(Image.open(run.path(DAMAGE_MASK)).convert("L")) >= 128).astype(np.uint8)
     by_id = {r["target_id"]: r for r in records}
+    fcfg = run.config["first_construction"]
+    display = fcfg["generative_display"]
+    if display not in GENERATIVE_DISPLAYS:
+        raise ContractError(f"config first_construction.generative_display: {display!r}; "
+                            f"expected one of {', '.join(GENERATIVE_DISPLAYS)}")
 
-    rendered = {}
+    rendered: dict[str, dict] = {}
+    extras: dict[str, dict] = {}
     for view, report in completion["views"].items():
         if "targets" not in report:
             log.info("[render] view %s: nothing to render (%s)", view, report.get("status"))
@@ -336,19 +399,38 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         if unexplained:
             raise ContractError(f"[render] {view}: {unexplained} changed pixel(s) have no source label")
         statuses = {e["target_id"]: e["status"] for e in report["targets"]}
-        marked, counts = mark_view(completed, damage, labels, records, statuses, rcfg)
-        Image.fromarray(with_bar(marked, rcfg, view, view_legend(rcfg, counts))).save(run.path(f"{view}.png"))
         gen = report.get("generative")
         gen_label = gen["label"] if gen else None
+        map_labels, map_gen = labels, gen_label
+        if gen_label and display == "separate":
+            # The view image holds no generated pixel: it is the image the same run gives with the fill
+            # off. The guess is a second file, marked and with a banner (FAILURE_ANALYSIS §10, option 1).
+            guess = labels == gen_label
+            base, map_labels, map_gen = completed.copy(), labels.copy(), None
+            base[guess] = photo[guess]
+            map_labels[guess] = 0
+            marked, counts = mark_view(base, damage, map_labels, records, statuses, rcfg)
+            guess_image, guess_counts = mark_view(completed, damage, labels, records, statuses, rcfg, gen_label, fcfg)
+            guess_file = f"{view}_ai_guess.png"
+            Image.fromarray(np.vstack([
+                banner(photo.shape[1], AI_GUESS_BANNER, float(rcfg["text_scale"])),
+                with_bar(guess_image, rcfg, f"{view} (AI guess)", view_legend(rcfg, guess_counts)),
+            ])).save(run.path(guess_file))
+            extras[view] = {"ai_guess_image": guess_file, "ai_guess_markings_px": guess_counts}
+        else:
+            marked, counts = mark_view(completed, damage, labels, records, statuses, rcfg, gen_label, fcfg)
+        if gen_label:
+            extras.setdefault(view, {})["generative_display"] = display
+        Image.fromarray(with_bar(marked, rcfg, view, view_legend(rcfg, counts))).save(run.path(f"{view}.png"))
         label_targets = {k: by_id[v] for k, v in report["labels"].items() if v != GENERATIVE_LABEL_NAME}
-        Image.fromarray(with_bar(source_map(photo, labels, label_targets, gen_label, ts=float(rcfg["text_scale"])),
-                                 rcfg, view, SOURCE_MAP_LEGEND)).save(
+        Image.fromarray(with_bar(source_map(photo, map_labels, label_targets, map_gen, ts=float(rcfg["text_scale"])),
+                                 rcfg, view, source_map_legend(map_gen is not None))).save(
             run.path(f"{view}_source_map.png"))
         if view == "first_construction":
             overlay, generative_px = conjecture_overlay(photo, damage, labels, report, rcfg)
             Image.fromarray(with_bar(overlay, rcfg, view, conjecture_legend(rcfg))).save(
                 run.path("first_construction_conjecture_overlay.png"))
-            counts["generative_px"] = generative_px
+            counts["generative_px"] = generative_px   # generated in this view's completion (in the image only when inline)
         rendered[view] = counts
         log.info("[render] %s: %s.png and %s_source_map.png | %s", view, view, view, counts)
 
@@ -362,7 +444,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         "damage_mask": {"file": DAMAGE_MASK, "sha256": sha256(run.path(DAMAGE_MASK))},
         "views": {v: {"image": f"{v}.png", "source_map": f"{v}_source_map.png",
                       "source_labels": f"{v}_source.png", "labels": completion["views"][v]["labels"],
-                      "markings_px": rendered[v],
+                      "markings_px": rendered[v], **extras.get(v, {}),
                       **({"conjecture_overlay": "first_construction_conjecture_overlay.png"}
                          if v == "first_construction" else {})} for v in rendered},
         "method_values": ["donor_transfer", "generative", "none"],

@@ -24,6 +24,10 @@ scale:
     - restoration.hatch_width_px
     - restoration.hatch_width_b_px
     - restoration.text_scale
+    - first_construction.guess_stripe_spacing_px
+    - first_construction.guess_stripe_width_px
+    - first_construction.guess_outline_px
+    - first_construction.guess_dash_px
     - synthetic.full_margin_px
     - synthetic.background_size_px
     - synthetic.background_clearance_px
@@ -242,6 +246,19 @@ first_construction:
   # first-construction image; conditioning (depth, lineart) is computed from that image. Only pixels of
   # that open area are replaced. Never runs for the restoration view. Off unless RND-003 judges it usable.
   generative: false
+  # How generated pixels are shown when the pass ran (T26, docs/FAILURE_ANALYSIS.md §10). They are never
+  # outlined or tone-shifted like donor pixels.
+  #   separate: first_construction.png holds no generated pixel (open areas stay hatched, the image is the
+  #             same as with the fill off); the guess goes to first_construction_ai_guess.png with a banner.
+  #   inline:   generated pixels stay in first_construction.png, striped and dash-outlined in the
+  #             conjecture colour, with their own legend item.
+  generative_display: separate
+  # Marking of "AI guess" pixels (display choices, not calibrated).
+  guess_stripe_spacing_px: 6        # diagonal stripes every this many pixels ...
+  guess_stripe_width_px: 2          # ... this wide ...
+  guess_stripe_alpha: 0.35          # ... blended towards the conjecture colour by this share
+  guess_outline_px: 1               # dashed inner outline, thickness
+  guess_dash_px: 4                  # dash and gap length
   # Values copied from the archived first-construction mode ("ozgun_hal") of archive/inpaint/inpaint_v3.py;
   # never calibrated. strength was 0.55 here as a placeholder before T21.
   strength: 0.96
