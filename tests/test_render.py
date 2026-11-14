@@ -247,6 +247,41 @@ class GenerativeMarkingTest(unittest.TestCase):
         self.assertIn("hatched: no evidence", texts)
         self.assertNotIn(render.OUTSIDE_FACADE_LEGEND, legend_texts(rcfg, {**counts, "open_outside_facade_px": 0}))
 
+    def test_a_donor_placed_as_a_guess_is_striped_not_outlined(self) -> None:
+        cfg = load_config()
+        rcfg, gcfg = cfg["restoration"], cfg["first_construction"]
+        completed = np.full((40, 60, 3), 100, np.uint8)
+        labels = np.zeros((40, 60), np.uint16)
+        labels[5:25, 5:25] = 1                                     # accepted donor
+        labels[5:25, 30:50] = 2                                    # donor placed as a guess
+        damage = (labels > 0).astype(np.uint8)
+        marked, counts = render.mark_view(completed, damage, labels, [], {}, rcfg, gcfg=gcfg,
+                                          donor_guess={"labels": {2}, "withheld": set()})
+        guess = marked[labels == 2]
+        shifted = int(round(100 + 155 * rcfg["tone_shift"]))
+        self.assertFalse(np.any(np.all(guess == rcfg["outline_color"], axis=-1)))
+        self.assertFalse(np.any(np.all(guess == shifted, axis=-1)))
+        self.assertTrue(np.any(np.all(guess == rcfg["guess_color"], axis=-1)))         # dashed outline
+        self.assertTrue(np.any(np.all(marked[labels == 1] == rcfg["outline_color"], axis=-1)))
+        self.assertEqual((counts["completed_px"], counts["donor_guess_px"]), (400, 400))
+        self.assertIn(render.DONOR_GUESS_LEGEND, legend_texts(rcfg, counts))
+
+    def test_a_withheld_guess_is_hatched_in_the_guess_colour(self) -> None:
+        rcfg = load_config()["restoration"]
+        completed = np.full((40, 60, 3), 100, np.uint8)
+        labels = np.zeros((40, 60), np.uint16)
+        damage = np.zeros((40, 60), np.uint8)
+        damage[5:35, 5:55] = 1
+        records = [{"target_id": "t_001", "tier": "A", "kind": "fragmented_element", "target_box": [5, 5, 30, 35]}]
+        marked, counts = render.mark_view(completed, damage, labels, records, {"t_001": "guess_needs_expert"}, rcfg,
+                                          donor_guess={"labels": set(), "withheld": {"t_001"}})
+        self.assertEqual(counts["open_guess_withheld_px"], 25 * 30)
+        self.assertEqual(counts["open_no_evidence_px"], 25 * 30)
+        inside, outside = marked[5:35, 5:30].reshape(-1, 3), marked[5:35, 30:55].reshape(-1, 3)
+        self.assertTrue(np.any(np.all(inside == rcfg["guess_color"], axis=-1)))
+        self.assertFalse(np.any(np.all(outside == rcfg["guess_color"], axis=-1)))
+        self.assertIn(render.WITHHELD_GUESS_LEGEND, legend_texts(rcfg, counts))
+
     def test_legend_lists_only_what_occurs(self) -> None:
         rcfg = load_config()["restoration"]
         zero = {"completed_px": 0, "ai_guess_px": 0, "open_tier_b_px": 0, "open_no_evidence_px": 0}

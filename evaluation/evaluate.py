@@ -326,14 +326,31 @@ def masked_ssim(a: np.ndarray, b: np.ndarray, region: np.ndarray, pad: int = 8) 
     return float(smap[region[y1:y2, x1:x2] > 0].mean())
 
 
+FIDELITY_MIN_PX = 30     # below this many filled pixels a correlation says nothing; reported as empty
+
+
+def filled_fidelity(original: np.ndarray, completed: np.ndarray, filled: np.ndarray) -> float | None:
+    """Grey-level NCC between the completed image and the original photograph over ``filled`` only:
+    the pixels that were hidden and then filled. Unlike SSIM over all hidden pixels it does not measure
+    coverage (T28, docs/FAILURE_ANALYSIS.md 8.3)."""
+    from i2r.complete import grey, ncc
+
+    if int(filled.sum()) < FIDELITY_MIN_PX:
+        return None
+    return round(ncc(grey(completed)[filled], grey(original)[filled]), 4)
+
+
 def view_metrics(original: np.ndarray, case_image: np.ndarray, completed: np.ndarray, hidden: np.ndarray,
                  case_damage: np.ndarray) -> dict[str, Any]:
     changed = np.any(completed != case_image, axis=2)
     n_hidden = int(hidden.sum())
     outside = case_damage == 0
     diff = np.abs(completed.astype(np.int16) - case_image.astype(np.int16)).max(axis=2)
+    filled = changed & (hidden > 0)
     return {
-        "filled": round(float((changed & (hidden > 0)).sum()) / n_hidden, 4) if n_hidden else None,
+        "filled_px": int(filled.sum()),
+        "fidelity": filled_fidelity(original, completed, filled),
+        "filled": round(float(filled.sum()) / n_hidden, 4) if n_hidden else None,
         "ssim": masked_ssim(completed, original, hidden),
         "preservation": int(diff[outside].max()) if outside.any() else 0,
     }
@@ -416,11 +433,20 @@ def evaluate_case(case_dir: Path, run_dir: Path, status: str, original: np.ndarr
     case_damage = (np.asarray(Image.open(case_dir / "damage_mask.png").convert("L")) >= 128).astype(np.uint8)
     row["ssim_open"] = masked_ssim(case_image, original, hidden)
     box = hidden_crop_box(hidden) if hidden.any() else None
+    completion = read_json(run_dir / "completion.json")
     for view in VIEW_NAMES:
         completed = np.asarray(Image.open(run_dir / f"{view}_completed.png").convert("RGB"))
         m = view_metrics(original, case_image, completed, hidden, case_damage)
         for k, v in m.items():
             row[f"{view}_{k}"] = v
+        # what the complete step measured for the target that decided this case (T28)
+        entry = next((e for e in completion["views"][view].get("targets", [])
+                      if t is not None and e["target_id"] == t["target_id"]), None)
+        if entry is not None and "alignment" in entry:
+            al = entry["alignment"]
+            row.update({f"{view}_target_status": entry["status"], f"{view}_score_before": al.get("score_before"),
+                        f"{view}_score": al.get("score"), f"{view}_on_bound": "+".join(al["on_bound"]) or "none",
+                        f"{view}_seam": entry["seam_agreement"]})
         if embed is not None and box is not None:
             x1, y1, x2, y2 = box
             size = int(embed.crop_px)
@@ -465,7 +491,9 @@ def summarise(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 CSV_COLUMNS = ("case_id", "variant", "element_id", "class", "expected_tier", "status", "tier", "tier_correct",
                "recovered", "target_id", "target_iou", "rule", "donor_id", "similarity", "reason", "ssim_open",
                *(f"{v}_{k}" for v in VIEW_NAMES for k in ("filled", "ssim", "perceptual", "preservation")),
-               "abstained")
+               "abstained",
+               *(f"{v}_{k}" for v in VIEW_NAMES for k in ("filled_px", "fidelity", "target_status", "score_before",
+                                                          "score", "on_bound", "seam")))
 
 
 def completion_markdown(rows: list[dict[str, Any]], summary: list[dict[str, Any]], header: dict[str, Any]) -> str:
@@ -513,6 +541,24 @@ def completion_markdown(rows: list[dict[str, Any]], summary: list[dict[str, Any]
             f"{f(r['restoration_filled'], True)} | {f(r['first_construction_filled'], True)} | "
             f"{f(r['first_construction_ssim'])} | {f(r['ssim_open'])} | "
             f"{r['restoration_preservation']}/{r['first_construction_preservation']} | {(r['reason'] or '')[:70]} |")
+    aligned = [r for r in rows if r["status"] == "completed" and r.get("first_construction_score") is not None]
+    if aligned:
+        lines += [
+            "",
+            "Alignment of the target that decided each case, first-construction view (T28). Fidelity = grey-level "
+            "NCC with the original over the pixels that were hidden and then filled; NCC = alignment score over "
+            "the visible fragment (before -> after the search); seam = NCC in the band of surviving pixels around "
+            "the fill.",
+            "",
+            "| Case | Status | Filled px | Fidelity | NCC before | NCC | On bound | Seam |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        for r in aligned:
+            lines.append(
+                f"| {r['case_id']} | {r['first_construction_target_status']} | {r['first_construction_filled_px']} | "
+                f"{f(r['first_construction_fidelity'])} | {f(r['first_construction_score_before'])} | "
+                f"{f(r['first_construction_score'])} | {r['first_construction_on_bound']} | "
+                f"{f(r['first_construction_seam'])} |")
     return "\n".join(lines) + "\n"
 
 

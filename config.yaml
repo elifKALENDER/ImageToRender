@@ -19,6 +19,7 @@ scale:
   length_keys:
     - damage.cut_margin_px
     - complete.feather_px
+    - complete.seam_band_px
     - restoration.outline_px
     - restoration.hatch_spacing_px
     - restoration.hatch_width_px
@@ -36,6 +37,7 @@ scale:
   area_keys:
     - damage.min_region_px
     - complete.refine_min_visible_px
+    - complete.seam_min_px
 
 paths:
   data_root: data/structures      # one folder per building: image.png, damage_mask.png, SOURCE.md
@@ -220,6 +222,22 @@ complete:
   match_colour: true
   # Alpha ramps from 0 at the damage-mask edge to 1 this many pixels inside it; outside it stays 0.
   feather_px: 2
+  # Acceptance of a tier A placement (T28, docs/rnd/RND-004-alignment-acceptance.md). A placement that
+  # fails is a guess for the expert: not completed in the restoration view, completed and marked as a
+  # guess in the first-construction view. null / false switches a test off.
+  # Seam agreement: NCC between the placed donor and the photograph over the surviving pixels within
+  # seam_band_px of the filled ones; not computed when that band has fewer than seam_min_px pixels.
+  seam_band_px: 4
+  seam_min_px: 30
+  # Chosen in T28 on s01 (n = 1 building, 9 synthetic partial cases, 3 classes; RND-004). The four cases
+  # with fidelity >= 0.65 have a score of 0.85-0.92 and a seam of 0.77-0.93; the other five have a seam of
+  # at most 0.63, and one of them a score of 0.89, so the score alone is not enough. No case lies between
+  # a score of 0.58 and 0.85: 0.80 is the cautious end of that gap, not a measured boundary.
+  min_alignment_score: 0.80
+  min_seam_agreement: 0.70
+  # All 9 synthetic cases end on a search bound, the four good ones too, so a bound cannot fail a
+  # placement by itself. It is recorded for every target (alignment.on_bound, alignment.limits).
+  guess_when_on_bound: false
 
 restoration:
   include_tier_b: false             # Venice Charter: stop where conjecture begins (§5.3, D4)
@@ -231,6 +249,7 @@ restoration:
   hatch_width_b_px: 2               # tier B hatch: wider, so it reads over dark interiors and differs from C
   text_scale: 1.0                   # OpenCV font scale factor for labels, legend and bar (scaled with the image)
   hatch_color: [220, 60, 60]        # tier C: no evidence
+  guess_color: [255, 150, 30]       # a donor placed or withheld as a guess (T28): orange stripes or hatch
   hatch_color_outside: [170, 170, 170]  # damage outside the facade limit: not part of the building (grey)
   hatch_color_b: [90, 180, 255]     # tier B when not restored: position implied (light blue, reads on dark)
   label: "AI proposal, not a restoration decision"

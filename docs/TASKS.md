@@ -15,9 +15,9 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: T26 is done (2026-11-14). T27: the mechanism is done, but point 5 of the failure analysis
-  is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`). The next task
-  is T28** (Phase 3, fixes from `docs/FAILURE_ANALYSIS.md`); T28 to T30 are not started. Author decision
+- **After v0.1.0: T26 and T28 are done (2026-11-14). T27: the mechanism is done, but point 5 of the failure
+  analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`). The
+  next task is T29** (Phase 3, fixes from `docs/FAILURE_ANALYSIS.md`); T29 and T30 are not started. Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
   skipped. Everything is developed, tuned and reported on s01 (n = 1 building). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
@@ -532,7 +532,7 @@ run the demo on s01. Fix anything missing. Merge to `main` and tag `v0.1.0`.
 
 ## Phase 3 — Fixes from the failure analysis (after v0.1.0)
 
-*Status: T26 done; T27 mechanism done, one acceptance item open (author); T28 to T30 not started. Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
+*Status: T26 and T28 done; T27 mechanism done, one acceptance item open (author); T29 and T30 not started. Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
 visual review of the s01 first-construction output with the generative fill on. Order set by the author:
 T26 (legend and labels), T27 (mask reaching the ground), T28 (alignment acceptance), T29 (slot rule), T30
 (logging). Section numbers such as "§8.3" in these five tasks refer to `docs/FAILURE_ANALYSIS.md`.
@@ -606,6 +606,24 @@ reaches below the hull.
 **Size.** S to M (M if a new mask file and its editor support are chosen).
 
 ### T28. Alignment acceptance: bound flag, seam test, threshold, "guess" status (c)
+*Status: done 2026-11-14 (`docs/rnd/RND-004-alignment-acceptance.md`), on s01 as it is; the author item
+(`recovered_arch_001`) is still open and the author will correct records by hand where needed. Every
+placed donor now has `alignment.on_bound`, `alignment.limits` and `seam_agreement` in `completion.json`
+and `provenance.json`. `complete.judge` fails a tier A placement below `min_alignment_score` (0.80) or
+`min_seam_agreement` (0.70); it then has the status `guess_needs_expert`: withheld in the restoration
+view (box hatched orange), painted with orange stripes and a dashed outline in the first-construction
+view. `evaluate.py completion` reports fidelity over the hidden-and-filled pixels. Calibration (9 cases,
+3 classes, n = 1 building): the seam separates the four high-fidelity cases (0.77-0.93) from the other
+five (0.63 or less); the score alone does not (`recovered_arch_065`: 0.89, fidelity 0.29); 9 of 9 end on
+a bound, so `guess_when_on_bound` stays false and the flag is only recorded. Result on s01 (run
+`20261114_130553`): 1 of 5 tier A targets accepted (`t_002`), 4 guesses; the restoration view falls from
+4,971 px to 648 px. `t_003` (point 1) is flagged by the score only; its seam is 0.91, so **the seam test
+does not catch point 1**. All four failing real scores (0.64-0.73) lie where no synthetic case exists, so
+0.80 is a cautious choice, not a measured boundary. Wider search: the score rises, fidelity falls (0.46
+to 0.39), 6 of 9 still on a bound; range unchanged. Not done: anisotropic scale (reason in RND-004).
+Acceptance item 3 is met through the record, not the image: an accepted target on a bound is drawn as
+completed and carries `on_bound` in `provenance.json`. Preservation 0 in all 28 synthetic cases. 151
+tests.*
 **What.** In `complete.align` and `transfer`: record on-bound flags and the search limits; compute seam
 agreement; add `complete.min_alignment_score` and `complete.min_seam_agreement`; a target failing
 them gets status `guess_needs_expert`, is not completed in the restoration view, and is completed but

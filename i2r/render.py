@@ -37,7 +37,7 @@ from PIL import Image
 
 from i2r.detect import class_color, load_elements
 from i2r.runio import ContractError, read_json, write_json
-from i2r.complete import GENERATIVE_LABEL_NAME, OUTSIDE_FACADE, load_facade_mask
+from i2r.complete import GENERATIVE_LABEL_NAME, GUESS, OUTSIDE_FACADE, load_facade_mask
 
 if TYPE_CHECKING:
     import argparse
@@ -106,10 +106,29 @@ def dash_pattern(shape: tuple[int, int], dash: int) -> np.ndarray:
     return ((xx // d + yy // d) % 2) == 0
 
 
+def stripe_marks(layer: np.ndarray, region: np.ndarray, colour: tuple, gcfg: dict) -> np.ndarray:
+    """The "guess" marking on ``region``: diagonal stripes blended towards ``colour`` and a dashed inner
+    outline in it. Returns the marked pixels."""
+    stripes = region & hatch_pattern(region.shape, int(gcfg["guess_stripe_spacing_px"]),
+                                     width=int(gcfg["guess_stripe_width_px"]))
+    a = float(gcfg["guess_stripe_alpha"])
+    layer[stripes] = layer[stripes] * (1.0 - a) + np.asarray(colour, np.float32) * a
+    dashes = inner_outline(region, int(gcfg["guess_outline_px"])) & dash_pattern(region.shape,
+                                                                                int(gcfg["guess_dash_px"]))
+    layer[dashes] = colour
+    return stripes | dashes
+
+
 def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, records: list[dict],
               statuses: dict[str, str], rcfg: dict, generative_label: int | None = None,
-              gcfg: dict | None = None, facade: np.ndarray | None = None) -> tuple[np.ndarray, dict[str, int]]:
+              gcfg: dict | None = None, facade: np.ndarray | None = None,
+              donor_guess: dict | None = None) -> tuple[np.ndarray, dict[str, int]]:
     """The marked photograph (same size) and pixel counts per marking.
+
+    ``donor_guess`` = {"labels": labels of donors placed as a guess, "withheld": target IDs of guesses
+    not painted in this view} (T28). A painted guess gets the guess marking in ``restoration.guess_color``
+    instead of the donor outline and tone shift; the open damage in a withheld guess's box is hatched in
+    that colour.
 
     Open damage pixels outside ``facade`` (1 inside; the run's facade limit) are hatched in their own
     colour: they are not "no evidence" but "not part of the building" (T27).
@@ -120,7 +139,10 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
     damage_b = damage > 0
     changed = labels > 0
     guess = (labels == int(generative_label)) if generative_label else np.zeros_like(changed)
-    donor = changed & ~guess
+    guess_labels = sorted((donor_guess or {}).get("labels", ()))
+    withheld = set((donor_guess or {}).get("withheld", ()))
+    donor_guess_px = np.isin(labels, guess_labels) if guess_labels else np.zeros_like(changed)
+    donor = changed & ~guess & ~donor_guess_px
     layer = completed.astype(np.float32).copy()
 
     # donor-completed pixels: tone shift towards white, then a thin inner outline per target
@@ -133,32 +155,34 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
 
     # generated pixels: stripes blended towards the conjecture colour and a dashed inner outline
     guess_marks = np.zeros_like(changed)
+    if (guess.any() or donor_guess_px.any()) and gcfg is None:
+        raise ContractError("mark_view: guess pixels need the first_construction settings")
     if guess.any():
-        if gcfg is None:
-            raise ContractError("mark_view: a generative label needs the first_construction settings")
-        stripes = guess & hatch_pattern(damage.shape, int(gcfg["guess_stripe_spacing_px"]),
-                                        width=int(gcfg["guess_stripe_width_px"]))
-        a = float(gcfg["guess_stripe_alpha"])
-        layer[stripes] = layer[stripes] * (1.0 - a) + np.asarray(CONJECTURE_COLOUR, np.float32) * a
-        dashes = inner_outline(guess, int(gcfg["guess_outline_px"])) & dash_pattern(damage.shape,
-                                                                                   int(gcfg["guess_dash_px"]))
-        layer[dashes] = CONJECTURE_COLOUR
-        guess_marks = stripes | dashes
+        guess_marks = stripe_marks(layer, guess, CONJECTURE_COLOUR, gcfg)
+    # donors placed as a guess: the same marking family, in the guess colour, one outline per target
+    for value in guess_labels:
+        stripe_marks(layer, labels == value, tuple(rcfg["guess_color"]), gcfg)
 
-    # open areas: B targets not completed, then everything else still damaged
+    # open areas: B targets not completed, withheld guesses, then everything else still damaged
     open_b = np.zeros_like(damage_b)
+    open_g = np.zeros_like(damage_b)
     for r in records:
-        if r["tier"] == "B" and statuses.get(r["target_id"]) != "completed":
-            x1, y1, x2, y2 = r["target_box"]
+        x1, y1, x2, y2 = r["target_box"]
+        if r["target_id"] in withheld:
+            open_g[y1:y2, x1:x2] = True
+        elif r["tier"] == "B" and statuses.get(r["target_id"]) != "completed":
             open_b[y1:y2, x1:x2] = True
-    open_b &= damage_b & ~changed
-    open_c = damage_b & ~changed & ~open_b
+    open_g &= damage_b & ~changed
+    open_b &= damage_b & ~changed & ~open_g
+    open_c = damage_b & ~changed & ~open_b & ~open_g
     open_out = open_c & (facade == 0) if facade is not None else np.zeros_like(open_c)
     open_c &= ~open_out
     spacing = int(rcfg["hatch_spacing_px"])
     # tier B: opposite diagonal, wider lines, so it reads over dark interiors and differs from C
     b_lines = hatch_pattern(damage.shape[::-1], spacing, width=int(rcfg["hatch_width_b_px"])).T[:, ::-1]
     layer[open_b & b_lines] = rcfg["hatch_color_b"]
+    if open_g.any():
+        layer[open_g & b_lines] = rcfg["guess_color"]
     layer[open_c & hatch_pattern(damage.shape, spacing, offset=spacing // 2,
                                  width=int(rcfg["hatch_width_px"]))] = rcfg["hatch_color"]
     if open_out.any():
@@ -171,7 +195,9 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
         x1, y1, x2, y2 = r["target_box"]
         in_box = np.zeros_like(damage_b)
         in_box[y1:y2, x1:x2] = True
-        if r["tier"] == "B" and statuses.get(r["target_id"]) != "completed":
+        if r["target_id"] in withheld:
+            labelled += put_label(layer, "guess", open_g & in_box, (255, 255, 255), float(rcfg["text_scale"]))
+        elif r["tier"] == "B" and statuses.get(r["target_id"]) != "completed":
             labelled += put_label(layer, "B: implied", open_b & in_box, (255, 255, 255), float(rcfg["text_scale"]))
         elif r["kind"] == "uncovered_region":
             labelled += put_label(layer, "no evidence", open_c & in_box, (255, 255, 255), float(rcfg["text_scale"]))
@@ -185,6 +211,7 @@ def mark_view(completed: np.ndarray, damage: np.ndarray, labels: np.ndarray, rec
     out[damage_b] = layer[damage_b]          # markings live inside the damage mask only
     counts = {"completed_px": int(donor.sum()), "outline_px": int(outline.sum()),
               "ai_guess_px": int(guess.sum()), "ai_guess_marks_px": int(guess_marks.sum()),
+              "donor_guess_px": int(donor_guess_px.sum()), "open_guess_withheld_px": int(open_g.sum()),
               "open_tier_b_px": int(open_b.sum()), "open_no_evidence_px": int(open_c.sum()),
               "open_outside_facade_px": int(open_out.sum()), "labels_drawn": int(labelled)}
     return out, counts
@@ -275,8 +302,12 @@ def view_legend(rcfg: dict, counts: dict[str, int]) -> list:
     items = []
     if counts["completed_px"]:
         items.append(((240, 240, 240), "completed from a donor (outlined)"))
+    if counts.get("donor_guess_px"):
+        items.append((tuple(rcfg["guess_color"]), DONOR_GUESS_LEGEND))
     if counts.get("ai_guess_px"):
         items.append((CONJECTURE_COLOUR, AI_GUESS_LEGEND))
+    if counts.get("open_guess_withheld_px"):
+        items.append((tuple(rcfg["guess_color"]), WITHHELD_GUESS_LEGEND))
     if counts["open_tier_b_px"]:
         items.append((tuple(rcfg["hatch_color_b"]), "hatched: B, position implied, not restored"))
     if counts["open_no_evidence_px"]:
@@ -288,6 +319,8 @@ def view_legend(rcfg: dict, counts: dict[str, int]) -> list:
 
 OUTSIDE_FACADE_LEGEND = "hatched: outside the facade limit, not filled"
 AI_GUESS_LEGEND = "striped: AI guess (generative), no evidence"
+DONOR_GUESS_LEGEND = "striped: donor placed as a guess, needs expert"
+WITHHELD_GUESS_LEGEND = "hatched: tier A guess withheld, needs expert"
 AI_GUESS_BANNER = "AI GUESS: no evidence in the photograph"
 GENERATIVE_DISPLAYS = ("separate", "inline")
 
@@ -333,7 +366,7 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
                 for view, rep in completion["views"].items()}
     entries = []
     for r in records:
-        views, reasons, pixels, alignment = {}, {}, {}, {}
+        views, reasons, pixels, alignment, acceptance = {}, {}, {}, {}, {}
         method = "none"
         for view, by_id in per_view.items():
             if not by_id:
@@ -342,12 +375,16 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
             e = by_id.get(r["target_id"])
             if e is None:
                 raise ContractError(f"completion.json view {view}: no entry for target {r['target_id']}")
-            views[view] = "completed" if e["status"] == "completed" else "not_completed"
+            views[view] = e["status"] if e["status"] in ("completed", GUESS) else "not_completed"
             reasons[view] = e.get("note") or e["rule_reason"]
             pixels[view] = e["pixels_changed"]
-            if e["status"] == "completed":
+            if e.get("method") == "donor_transfer":
                 method = e["method"]
-                alignment[view] = {k: e["alignment"].get(k) for k in ("dx", "dy", "scale", "score_before", "score")}
+            if "alignment" in e and e["status"] in ("completed", GUESS):
+                alignment[view] = {**{k: e["alignment"].get(k) for k in ("dx", "dy", "scale", "score_before", "score",
+                                                                        "on_bound", "limits")},
+                                   "seam_agreement": e.get("seam_agreement")}
+                acceptance[view] = e.get("acceptance")
         entries.append({
             "target_id": r["target_id"],
             "kind": r["kind"],
@@ -369,6 +406,7 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
             "view_reasons": reasons,
             "pixels_changed": pixels,
             "alignment": alignment,
+            "acceptance": acceptance,
         })
     return entries
 
@@ -418,6 +456,9 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         gen = report.get("generative")
         gen_label = gen["label"] if gen else None
         map_labels, map_gen = labels, gen_label
+        guesses = [e for e in report["targets"] if e["status"] == GUESS]
+        donor_guess = {"labels": {e["label"] for e in guesses if e.get("label")},
+                       "withheld": {e["target_id"] for e in guesses if not e.get("label")}}
         if gen_label and display == "separate":
             # The view image holds no generated pixel: it is the image the same run gives with the fill
             # off. The guess is a second file, marked and with a banner (FAILURE_ANALYSIS §10, option 1).
@@ -425,9 +466,10 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
             base, map_labels, map_gen = completed.copy(), labels.copy(), None
             base[guess] = photo[guess]
             map_labels[guess] = 0
-            marked, counts = mark_view(base, damage, map_labels, records, statuses, rcfg, facade=facade)
+            marked, counts = mark_view(base, damage, map_labels, records, statuses, rcfg, gcfg=fcfg, facade=facade,
+                                       donor_guess=donor_guess)
             guess_image, guess_counts = mark_view(completed, damage, labels, records, statuses, rcfg, gen_label, fcfg,
-                                                facade)
+                                                facade, donor_guess)
             guess_file = f"{view}_ai_guess.png"
             Image.fromarray(np.vstack([
                 banner(photo.shape[1], AI_GUESS_BANNER, float(rcfg["text_scale"])),
@@ -436,7 +478,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
             extras[view] = {"ai_guess_image": guess_file, "ai_guess_markings_px": guess_counts}
         else:
             marked, counts = mark_view(completed, damage, labels, records, statuses, rcfg, gen_label, fcfg,
-                                                facade)
+                                                facade, donor_guess)
         if gen_label:
             extras.setdefault(view, {})["generative_display"] = display
         Image.fromarray(with_bar(marked, rcfg, view, view_legend(rcfg, counts))).save(run.path(f"{view}.png"))
@@ -468,6 +510,8 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         # Facade limit of this run; damage outside it is listed as targets of kind outside_facade (T27).
         "facade": evidence.get("facade"),
         "method_values": ["donor_transfer", "generative", "none"],
+        # completed = accepted donor placement; guess_needs_expert = placed or withheld as a guess (T28).
+        "view_status_values": ["completed", GUESS, "not_completed", "not_rendered"],
         "targets": entries,
         # One conjecture entry per view that ran the tier C pass: no donor, no evidence (§5.4, §5.6).
         "generative_fill": {v: {"method": "generative", "donor_id": None, "evidence": "conjecture",

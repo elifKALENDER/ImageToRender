@@ -154,6 +154,73 @@ class PreservationTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
+class AcceptanceTest(unittest.TestCase):
+    """T28: a placement that fails the acceptance tests is a guess for the expert, not a completion."""
+
+    def test_a_correct_placement_is_accepted_and_its_measurements_are_recorded(self) -> None:
+        rgb, damage, donor_mask, _ = scene()
+        _, _, report = complete.complete_view("restoration", rgb, damage, [record("A")],
+                                              {"donor": donor_mask}, config())
+        entry = report["targets"][0]
+        self.assertEqual(entry["status"], "completed")
+        self.assertEqual(entry["acceptance"], {"accepted": True, "reasons": [], "painted": True})
+        self.assertEqual(entry["alignment"]["limits"], {"dx": 3, "dy": 6, "scales": [0.94, 1.0, 1.06]})
+        self.assertEqual(entry["alignment"]["on_bound"], ["dx"])       # the true shift (3) is the search limit
+        self.assertGreater(entry["seam_agreement"], 0.9)
+        self.assertGreater(entry["seam_px"], 0)
+        self.assertEqual(report["guesses"], 0)
+
+    def test_a_donor_misplaced_by_10_px_is_a_guess(self) -> None:
+        # the fragment's content sits 10 px right of its box: outside the search (3 px), so no good placement
+        with mock.patch(f"{__name__}.SHIFT", (10, 2)):
+            rgb, damage, donor_mask, _ = scene()
+        restoration, labels_r, report_r = complete.complete_view("restoration", rgb, damage, [record("A")],
+                                                                 {"donor": donor_mask}, config())
+        entry = report_r["targets"][0]
+        self.assertEqual(entry["status"], complete.GUESS)
+        self.assertFalse(entry["acceptance"]["accepted"])
+        self.assertFalse(entry["acceptance"]["painted"])
+        self.assertIn("min_alignment_score", " ".join(entry["acceptance"]["reasons"]))
+        self.assertIn("not completed in this view", entry["note"])
+        # the restoration view withholds it: nothing painted, no label
+        self.assertTrue(np.array_equal(restoration, rgb))
+        self.assertFalse(labels_r.any())
+        self.assertEqual((entry["pixels_changed"], entry["method"], report_r["labels"]), (0, "none", {}))
+        self.assertEqual((report_r["completed"], report_r["guesses"]), (0, 1))
+        # the first-construction view paints it, as a guess
+        first, labels_f, report_f = complete.complete_view("first_construction", rgb, damage, [record("A")],
+                                                           {"donor": donor_mask}, config())
+        entry = report_f["targets"][0]
+        self.assertEqual(entry["status"], complete.GUESS)
+        self.assertTrue(entry["acceptance"]["painted"])
+        self.assertGreater(entry["pixels_changed"], 0)
+        self.assertEqual(report_f["labels"], {"1": "t_001"})
+        self.assertTrue(np.array_equal(first[damage == 0], rgb[damage == 0]))
+
+    def test_tests_are_off_when_their_settings_are_null(self) -> None:
+        with mock.patch(f"{__name__}.SHIFT", (10, 2)):
+            rgb, damage, donor_mask, _ = scene()
+        cfg = config()
+        cfg["complete"].update({"min_alignment_score": None, "min_seam_agreement": None})
+        _, _, report = complete.complete_view("restoration", rgb, damage, [record("A")], {"donor": donor_mask}, cfg)
+        self.assertEqual(report["targets"][0]["status"], "completed")
+
+    def test_judge(self) -> None:
+        ccfg = {"min_alignment_score": 0.8, "min_seam_agreement": 0.7, "guess_when_on_bound": False}
+        good = {"score": 0.9, "on_bound": ["scale"]}
+        self.assertEqual(complete.judge(good, 0.9, "A", ccfg), [])
+        self.assertEqual(complete.judge(good, None, "A", ccfg), [])           # no seam band: not a failure
+        self.assertEqual(len(complete.judge(good, 0.2, "A", ccfg)), 1)        # high score, poor seam
+        self.assertEqual(len(complete.judge({"score": 0.5, "on_bound": []}, 0.2, "A", ccfg)), 2)
+        self.assertEqual(len(complete.judge({"score": None, "on_bound": []}, None, "A", ccfg)), 1)
+        self.assertEqual(complete.judge({"score": None, "on_bound": []}, None, "B", ccfg), [])
+        self.assertEqual(len(complete.judge(good, 0.9, "A", {**ccfg, "guess_when_on_bound": True})), 1)
+
+    def test_seam_agreement_needs_a_band(self) -> None:
+        image = np.zeros((10, 10, 3), np.uint8)
+        nothing = np.zeros((10, 10), bool)
+        self.assertEqual(complete.seam_agreement(image, nothing, image, nothing, nothing, 4, 30), (None, 0))
+
 
 def fake_generate(calls: list):
     """Stands in for generative_fill: paints the whole image magenta-ish and records the open area."""

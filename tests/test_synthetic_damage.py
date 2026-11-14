@@ -181,6 +181,22 @@ class ScoringTest(unittest.TestCase):
         self.assertEqual(s["background"]["preservation_max"], 0)
 
 
+class FidelityTest(unittest.TestCase):
+    """T28: fidelity is measured only on pixels that were hidden and then filled."""
+
+    def test_filled_fidelity(self) -> None:
+        rng = np.random.default_rng(3)
+        original = rng.integers(0, 256, size=(30, 30, 3), dtype=np.uint8)
+        filled = np.zeros((30, 30), bool)
+        filled[5:20, 5:20] = True
+        self.assertAlmostEqual(evaluate.filled_fidelity(original, original.copy(), filled), 1.0, places=3)
+        wrong = np.roll(original, 7, axis=1)
+        self.assertLess(evaluate.filled_fidelity(original, wrong, filled), 0.5)
+        few = np.zeros((30, 30), bool)
+        few[0, :5] = True
+        self.assertIsNone(evaluate.filled_fidelity(original, original, few))
+
+
 if __name__ == "__main__":
     unittest.main()
 

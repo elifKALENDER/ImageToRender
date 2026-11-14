@@ -89,6 +89,11 @@ VIEW_RULES: dict[str, Callable[[dict, dict], tuple[bool, str]]] = {
     "first_construction": rule_first_construction,
 }
 
+# A donor placement that fails the acceptance tests (``judge``) is a guess for the expert, not a
+# completion (T28). The restoration view withholds it; the first-construction view paints and marks it.
+GUESS = "guess_needs_expert"
+GUESS_IS_PAINTED = {"restoration": False, "first_construction": True}
+
 
 # ---------------------------------------------------------------------------
 # Geometry and transfer (pure functions)
@@ -160,6 +165,7 @@ def align(rgb: np.ndarray, damage: np.ndarray, patch: np.ndarray, usable: np.nda
     target_grey = grey(rgb[wy1:wy2, wx1:wx2])
     w, h = x2 - x1, y2 - y1
     sx, sy = int(round(ccfg["refine_shift_frac"] * w)), int(round(ccfg["refine_shift_frac"] * h))
+    scales = [float(v) for v in ccfg["refine_scales"]]
     minimum = int(ccfg["refine_min_visible_px"])
 
     def score(scale: float, dx: int, dy: int) -> tuple[float, int]:
@@ -170,12 +176,13 @@ def align(rgb: np.ndarray, damage: np.ndarray, patch: np.ndarray, usable: np.nda
 
     base, base_n = score(1.0, 0, 0)
     result = {"scale": 1.0, "dx": 0, "dy": 0, "score_before": None if base == float("-inf") else round(base, 4),
-              "score": None, "visible_px": base_n, "searched": False}
+              "score": None, "visible_px": base_n, "searched": False,
+              "limits": {"dx": sx, "dy": sy, "scales": scales}, "on_bound": []}
     if base == float("-inf"):
         result["note"] = f"fewer than refine_min_visible_px ({minimum}) visible pixels; not aligned"
         return result
     best = (base, 1.0, 0, 0)
-    for scale in ccfg["refine_scales"]:
+    for scale in scales:
         for dy in range(-sy, sy + 1):
             for dx in range(-sx, sx + 1):
                 value, _ = score(float(scale), dx, dy)
@@ -183,7 +190,51 @@ def align(rgb: np.ndarray, damage: np.ndarray, patch: np.ndarray, usable: np.nda
                 if value > best[0] + 1e-9:
                     best = (value, float(scale), dx, dy)
     result.update({"scale": best[1], "dx": best[2], "dy": best[3], "score": round(best[0], 4), "searched": True})
+    # An optimum on the edge of the search means the true optimum probably lies outside it (T28).
+    if len(set(scales)) > 1 and best[1] in (min(scales), max(scales)):
+        result["on_bound"].append("scale")
+    if sx > 0 and abs(best[2]) == sx:
+        result["on_bound"].append("dx")
+    if sy > 0 and abs(best[3]) == sy:
+        result["on_bound"].append("dy")
     return result
+
+
+def seam_agreement(image: np.ndarray, mask: np.ndarray, photo: np.ndarray, damage_w: np.ndarray,
+                   fill: np.ndarray, band_px: int, min_px: int) -> tuple[float | None, int]:
+    """How well the placed donor continues the surviving stone: grey-level NCC between donor and
+    photograph over the surviving pixels within ``band_px`` of the filled ones (the donor is known
+    there but not painted). Returns (value, or None when the band has fewer than ``min_px`` pixels;
+    band pixel count). All arrays are window-sized."""
+    if not fill.any():
+        return None, 0
+    k = 2 * max(1, int(band_px)) + 1
+    near = cv2.dilate(fill.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))) > 0
+    band = near & mask & ~damage_w
+    n = int(band.sum())
+    if n < int(min_px):
+        return None, n
+    return round(ncc(grey(image)[band], grey(photo)[band]), 4), n
+
+
+def judge(alignment: dict, seam: float | None, tier: str, ccfg: dict) -> list[str]:
+    """Reasons why a placed donor is only a guess (empty list = accepted). Tier A only: tier B has no
+    fragment to be judged against. Each test is off while its setting is null or false."""
+    if tier != "A":
+        return []
+    reasons = []
+    low = ccfg["min_alignment_score"]
+    if low is not None:
+        if alignment.get("score") is None:
+            reasons.append("not aligned: too few visible fragment pixels")
+        elif alignment["score"] < float(low):
+            reasons.append(f"alignment score {alignment['score']:.2f} below min_alignment_score {float(low):.2f}")
+    low = ccfg["min_seam_agreement"]
+    if low is not None and seam is not None and seam < float(low):
+        reasons.append(f"seam agreement {seam:.2f} below min_seam_agreement {float(low):.2f}")
+    if ccfg["guess_when_on_bound"] and alignment.get("on_bound"):
+        reasons.append("alignment ended on the search bound: " + ", ".join(alignment["on_bound"]))
+    return reasons
 
 
 def feather_alpha(fill: np.ndarray, damage_window: np.ndarray, feather_px: float) -> np.ndarray:
@@ -209,16 +260,18 @@ def paint(out: np.ndarray, labels: np.ndarray, window: list[int], image: np.ndar
 
 
 def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.ndarray,
-             record: dict, donor_mask: np.ndarray, label: int, ccfg: dict) -> dict[str, Any]:
+             record: dict, donor_mask: np.ndarray, label: int, ccfg: dict,
+             paint_guess: bool = True) -> dict[str, Any]:
     """Transfer one donor into one target. ``rgb`` is the untouched photograph (alignment and colour
-    are measured on it); ``out`` and ``labels`` are written."""
+    are measured on it); ``out`` and ``labels`` are written. A placement judged a guess (``judge``) is
+    painted only when ``paint_guess``; the measurements are returned either way."""
     target_box = record["target_box"]
     patch, usable = donor_patch(rgb, damage, donor_mask, record["donor_box"], bool(record["flipped"]))
     window = window_for(target_box, ccfg, damage.shape)
     if record["tier"] == "A":
         alignment = align(rgb, damage, patch, usable, target_box, window, ccfg)
     else:
-        alignment = {"scale": 1.0, "dx": 0, "dy": 0, "searched": False,
+        alignment = {"scale": 1.0, "dx": 0, "dy": 0, "searched": False, "limits": None, "on_bound": [],
                      "note": "tier B: no fragment to align to; placed at the implied box"}
     image, mask = warp(patch, usable, placement(target_box, alignment["scale"], alignment["dx"], alignment["dy"]),
                        window)
@@ -231,11 +284,19 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
         image = np.clip(image.astype(np.float32) + shift, 0, 255).astype(np.uint8)
         colour_shift = [round(float(v), 1) for v in shift]
     fill = mask & damage_w
-    alpha = feather_alpha(fill, damage_w, float(ccfg["feather_px"]))
-    painted = paint(out, labels, window, image, alpha, label)
+    seam, seam_px = seam_agreement(image, mask, rgb[wy1:wy2, wx1:wx2], damage_w, fill,
+                                   int(ccfg["seam_band_px"]), int(ccfg["seam_min_px"]))
+    reasons = judge(alignment, seam, record["tier"], ccfg)
+    is_painted = not reasons or paint_guess
+    painted = 0
+    if is_painted:
+        alpha = feather_alpha(fill, damage_w, float(ccfg["feather_px"]))
+        painted = paint(out, labels, window, image, alpha, label)
     x1, y1, x2, y2 = target_box
     box_damage = int(damage[y1:y2, x1:x2].sum())
-    return {"alignment": alignment, "colour_shift": colour_shift, "pixels_painted": painted,
+    return {"alignment": alignment, "seam_agreement": seam, "seam_px": seam_px,
+            "acceptance": {"accepted": not reasons, "reasons": reasons, "painted": is_painted},
+            "colour_shift": colour_shift, "pixels_painted": painted,
             "damage_px_in_box": box_damage,
             "damage_px_in_box_left_unfilled": int(box_damage - (fill[y1 - wy1:y2 - wy1, x1 - wx1:x2 - wx1]).sum())}
 
@@ -454,14 +515,22 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
         else:
             label = len(label_names) + 1
             label_names[str(label)] = record["target_id"]
-            info = transfer(out, labels, rgb, damage, record, donor_masks[record["donor_id"]], label, ccfg)
-            entry.update({"status": "completed", "method": "donor_transfer", "label": label,
-                          "flipped": bool(record["flipped"]), **info})
+            info = transfer(out, labels, rgb, damage, record, donor_masks[record["donor_id"]], label, ccfg,
+                            paint_guess=GUESS_IS_PAINTED[view])
+            accepted, is_painted = info["acceptance"]["accepted"], info["acceptance"]["painted"]
+            if not is_painted:
+                del label_names[str(label)]            # nothing carries this label; the number is reused
+            entry.update({"status": "completed" if accepted else GUESS, "flipped": bool(record["flipped"]),
+                          "method": "donor_transfer" if is_painted else "none",
+                          **({"label": label} if is_painted else {"pixels_changed": 0}), **info})
+            if not accepted:
+                entry["note"] = (f"{GUESS}: " + "; ".join(info["acceptance"]["reasons"])
+                                 + ("" if is_painted else "; not completed in this view"))
         results.append(entry)
     for entry in results:  # final count after overlaps: pixels whose visible label is this target
         if entry.get("label"):
             entry["pixels_changed"] = int((labels == entry["label"]).sum())
-            if entry["pixels_changed"] == 0:
+            if entry["pixels_changed"] == 0 and entry["status"] == "completed":
                 entry["status"] = "completed_but_empty"
     generative = None
     if view == "first_construction" and config["first_construction"]["generative"] and generate is not None:
@@ -488,6 +557,7 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
     report = {"rule": rule.__name__, "labels": label_names, "targets": results,
               "pixels_changed": int((labels > 0).sum()),
               "completed": sum(1 for e in results if e["status"] == "completed"),
+              "guesses": sum(1 for e in results if e["status"] == GUESS),
               "generative": generative}
     return out, labels, report
 
@@ -574,15 +644,17 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
                  "pixels outside the damage mask unchanged (checked)",
                  view, view_report["completed"], tier_a, view_report["pixels_changed"])
         for e in view_report["targets"]:
-            if e["status"].startswith("completed"):
+            if "alignment" in e:
                 al = e["alignment"]
-                log.info("[complete]   %s %s donor %s%s: %d px, shift (%d, %d) scale %.2f, ncc %s -> %s, "
-                         "%d damage px in box left unfilled", e["target_id"], e["tier"], e["donor_id"],
-                         " flipped" if e["flipped"] else "", e["pixels_changed"], al["dx"], al["dy"],
-                         al["scale"], al.get("score_before"), al.get("score"), e["damage_px_in_box_left_unfilled"])
+                log.info("[complete]   %s %s donor %s%s: %s, %d px, shift (%d, %d) scale %.2f, ncc %s -> %s, "
+                         "on bound %s, seam %s, %d damage px in box left unfilled", e["target_id"], e["tier"],
+                         e["donor_id"], " flipped" if e["flipped"] else "", e["status"], e["pixels_changed"],
+                         al["dx"], al["dy"], al["scale"], al.get("score_before"), al.get("score"),
+                         al["on_bound"] or "none", e["seam_agreement"], e["damage_px_in_box_left_unfilled"])
     write_json(run.path(COMPLETION_FILE), report)
     run.meta["steps"].setdefault("complete", {})["views"] = {
-        v: {k: r[k] for k in ("completed", "pixels_changed")} for v, r in report["views"].items() if "completed" in r
+        v: {k: r[k] for k in ("completed", "guesses", "pixels_changed")}
+        for v, r in report["views"].items() if "completed" in r
     }
     # Whether the generative pass ran, so a run folder with generated pixels can be told apart (T26).
     gen = {v: r["generative"] for v, r in report["views"].items() if r.get("generative")}
