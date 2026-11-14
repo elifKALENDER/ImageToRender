@@ -12,7 +12,7 @@
 | Date | 2026-11-14 |
 | Branch | `fix/failure-analysis`, ahead of `main` (`v0.1.0`); not merged, which is the author's decision |
 | Structures | **n = 1 building** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only so far |
-| Reference run | `outputs/s01_test_church/20261114_150757` (generative fill off). Open `report.html` in it |
+| Reference run | `outputs/s01_test_church/20261114_150843` (generative fill off). Open `report.html` in it |
 | Tests | 164 pass (`python -m unittest discover tests`, no GPU) |
 
 Statements marked **(guess)** are the assistant's reading, not a measurement.
@@ -152,13 +152,17 @@ Ordered by how much they limit a presentable result.
   default).
 - Run folders written before 2026-11-14 keep their old images and legends.
 - The review window was opened and stepped through by a script; it has not been used by a person yet.
+- The decision flow was run once end to end on s01 by a script (approve `t_003`, reject `t_002`, run,
+  clear, run): the approved guess was completed in the restoration view, the rejected one withheld in
+  both, and after clearing the images were byte-identical to before. The run folder `20261114_150837`
+  holds that test's decisions (noted "round-trip test, not an expert decision"); it is not a result.
 
 ## 4. Manual work for the author, in order
 
 **Step 1 — decide on the five placed donors.** Changes the result at once; no drawing needed.
 
 ```
-python tools/target_review.py --run outputs/s01_test_church/20261114_150757
+python tools/target_review.py --run outputs/s01_test_church/20261114_150843
 python run.py --structure s01_test_church --from complete --no-review
 ```
 
