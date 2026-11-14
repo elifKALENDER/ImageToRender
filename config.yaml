@@ -162,6 +162,13 @@ evidence:
   # Kept in T20 (RND-002): 0.25 loses 3 of 9 partial recoveries; 0.50 recovers 2 more only through donors
   # of clearly different proportions (e.g. an arch of 36 x 48 px for one of 70 x 34 px).
   size_tolerance: 0.35
+  # T33: a fragment whose box covers only its standing part is given the vertical extent of its nearest
+  # intact same-class neighbour before the donor search, so the donor is not squeezed into the short box.
+  # Only when one end already agrees with the neighbour (within tier_b.row_tolerance of its height), the
+  # other end is short by more than that, and at least this share of the strip in between is damaged.
+  # The record keeps the drawn box as element_box; elements.json is not changed.
+  extend_fragment_box: true
+  extend_min_damage_share: 0.5      # initial guess, not calibrated (s01: the four strips are 0.96 to 1.0)
   alternatives_kept: 2
   try_flipped_donor: true
   # Tier A needs a visible fragment (§5.2). Below this share of visible pixels in the target box the

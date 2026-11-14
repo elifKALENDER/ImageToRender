@@ -129,6 +129,9 @@ The author reviewed the five placements in `tools/target_review.py`
   expert does not accept it as a donor).
 - Result with the decisions: both views complete `t_003` and `t_007`, 1,598 px (1.6 % of the damage);
   nothing is left as a guess.
+- Afterwards (T33, same day) the box of a short fragment is extended to its row neighbour. That changed
+  the placements of `t_001` and `t_007`, so those two decisions are stale; the table above describes the
+  placements of run `20261114_150843`.
 
 ## Wider search
 

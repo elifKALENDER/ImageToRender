@@ -1,19 +1,20 @@
 # Status after Phase 3 — what works, what does not, what needs the author
 
 > **Türkçe özet.** Hata analizinden çıkan beş görev (T26-T30) ve iki ek (uzman kararı aracı, rapor sayfası)
-> tamamlandı. Sistem artık az ama savunulabilir dolduruyor: s01'de restorasyon görünümünde tek bir kemer
-> parçası (648 piksel) kabul ediliyor, dört yerleştirme "tahmin" olarak sizin onayınızı bekliyor, hasarın
-> % 86'sı için fotoğrafta kanıt yok. Sizden beklenen elle işler sırasıyla: (1) beş yerleştirmeyi
-> `tools/target_review.py` ile onaylamak ya da reddetmek, (2) cephe maskesi çizmek, (3) `recovered_arch_001`
-> kaydını düzeltmek, (4) yayınlanabilir bir örnek için lisansı belli bir fotoğraf. Bölüm 4'te komutlarıyla.
+> tamamlandı; yazar beş yerleştirmeyi inceledi (2 onay, 3 ret) ve ret notları üzerine kutu uzatma kuralı
+> (T33) eklendi. Şu an s01'de 7 A hedefi var: restorasyon görünümünde yalnızca onaylı sağ kemer (847
+> piksel) boyanıyor, dört pilaster "tahmin" olarak kararınızı bekliyor (ikisi yeni, ikisinin yerleşimi
+> değiştiği için eski kararı geçersiz), iki yerleştirme reddedildi; hasarın % 85'i için kanıt yok. Sizden
+> beklenen: (1) dört pilasteri `tools/target_review.py` ile yeniden değerlendirmek, (2) cephe maskesi,
+> (3) `recovered_arch_001` kaydı, (4) lisansı belli bir fotoğraf. Bölüm 4'te komutlarıyla.
 
 | | |
 |---|---|
 | Date | 2026-11-14 |
 | Branch | `fix/failure-analysis`, ahead of `main` (`v0.1.0`); not merged, which is the author's decision |
 | Structures | **n = 1 building** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only so far |
-| Reference run | `outputs/s01_test_church/20261114_150843` (generative fill off). Open `report.html` in it |
-| Tests | 164 pass (`python -m unittest discover tests`, no GPU) |
+| Reference run | `outputs/s01_test_church/20261114_164027` (generative fill off, the author's decisions applied). Open `report.html` in it |
+| Tests | 169 pass (`python -m unittest discover tests`, no GPU) |
 
 Statements marked **(guess)** are the assistant's reading, not a measurement.
 
@@ -45,14 +46,21 @@ Three things can be entered by hand, each with a tool:
 
 | | Restoration view | First-construction view |
 |---|---|---|
-| Accepted donor pixels | 648 (0.6 % of the damage) | 648 (0.6 %) |
-| Guesses | 4 targets withheld (boxes hatched orange) | 4 targets painted and marked, 4,323 px (4.3 %) |
-| No evidence, open | 86.2 % | 90.3 % |
-| Outside the facade limit | 4.8 % | 4.8 % |
+| Completed (approved by the expert) | 847 px (0.8 % of the damage): `t_003` | the same |
+| Guesses | 4 targets withheld (boxes hatched orange) | 4 targets painted and marked, 6,394 px (6.4 %) |
+| Rejected by the expert | `t_002`, `t_006`: not painted | not painted |
+| No evidence, open | 84.6 % | 88.1 % |
+| Outside the facade limit | 4.5 % | 4.7 % |
 
-21 targets: 5 tier A, 0 tier B, 16 tier C. In `v0.1.0` the same photograph gave 4,971 px in the
+20 targets: 7 tier A, 0 tier B, 13 tier C. In `v0.1.0` the same photograph gave 4,971 px in the
 restoration view and 11,367 px in the first-construction view; the difference is what the acceptance tests
-(T28) and the slot rule (T29) now withhold.
+(T28), the slot rule (T29) and the expert's rejections now withhold.
+
+**The expert's review (2026-11-14).** The author decided on the five placements of run `20261114_150843`:
+approve `t_003`, `t_007`; reject `t_001` (ends short), `t_002` (arch leg does not reach the capital),
+`t_006` (donor not an intact pilaster). The automatic tests agreed on 2 of 5
+(`docs/rnd/RND-004-alignment-acceptance.md`). The box extension (T33) followed from the note on `t_001`;
+it changed the placements of `t_001` and `t_007`, so those two decisions are stale and both wait again.
 
 ## 3. Problems, and what causes each
 
@@ -69,8 +77,11 @@ Ordered by how much they limit a presentable result.
   Using a donor from another photograph is not implemented (R5c in `docs/TASKS.md`).
 - **Needs the author.** A decision on whether such a cross-photograph donor is worth building.
 
-### P2. Four of five placements are "guess", on thresholds that are not settled
-- **What.** Only `t_002` passes. `t_001`, `t_003`, `t_006`, `t_007` are guesses.
+### P2. The automatic acceptance tests do not agree with the expert
+- **What.** Of the first five placements the tests passed only `t_002`, which the expert rejected; the
+  expert approved two the tests held back. None of the three rejections was about alignment as measured:
+  two about extent, one about the choice of donor. After T33 four pilasters (`t_001`, `t_004`, `t_005`,
+  `t_007`) are guesses and wait for the expert.
 - **Cause.** `min_alignment_score` 0.80 is the cautious end of a range (0.58 to 0.85) in which the 9
   synthetic cases have no example; the four real scores are 0.64 to 0.73, inside that range
   (`docs/rnd/RND-004-alignment-acceptance.md`). The tests cannot be made more exact with this data.
@@ -78,8 +89,8 @@ Ordered by how much they limit a presentable result.
   comparison images. The three pilaster placements are 18 to 27 px wide and hard to judge at this size,
   also for a person; `t_006` has the lowest seam agreement (-0.33). This is for the expert, not for a
   threshold.
-- **Needs the author.** Review the five placements (section 4, step 1). This is the step that turns the
-  output from "what the tests allow" into "what the expert accepts".
+- **Needs the author.** Review the four pilasters (section 4, step 1). For `t_006` the review tool
+  cannot yet offer another donor (open item).
 
 ### P3. The inventory has to be made by hand, and one record is wrong
 - **What.** Raw detection is not usable: on s01 52 % class-aware recall, every score below 0.06; on
@@ -114,13 +125,16 @@ Ordered by how much they limit a presentable result.
   element's own axis instead of the box. Neither is done.
 - **Needs the author.** Nothing now; it is why the expert's review (P2) matters.
 
-### P6. A surviving fragment cannot be completed when its box covers only the standing part
-- **What.** `recovered_pilaster_046` and `recovered_pilaster_020` stay tier C ("no usable donor: size").
-- **Cause.** The size filter compares the fragment's box (99 px high) with whole pilasters (about 200 px).
-  Completing such a fragment needs its box extended to the row's height first. Left out of T29 to keep the
-  structure simple (R-029a).
-- **Needs the author.** Either redraw those two boxes at full height in the editor (then the existing
-  path applies), or ask for R-029a.
+### P6. A fragment whose box covers only the standing part (addressed by T33, results unjudged)
+- **What.** Four pilaster boxes were shorter than their row; the donor was squeezed into the short box
+  (`t_001`, rejected for it) or no donor passed the size filter (`recovered_pilaster_046`, `_020`).
+- **Now.** T33 extends such a box to the vertical extent of the nearest intact same-class neighbour when
+  the strip in between is damaged. All four are extended and placed; all four are guesses.
+  `t_005` (`recovered_pilaster_020`) has alignment score -0.04 and is probably not usable **(guess)**.
+- **Not covered.** `t_002`: the arch's box already reaches the capital, the placed arch leg does not.
+  That is placement (one scale for both directions), see P5.
+- **Needs the author.** The review of step 1. The extension can be overruled by drawing the box in the
+  editor: a box that already has the row's extent is not changed.
 
 ### P7. Position rules (tier B) almost never fire
 - **What.** s01 has no tier B target now. In the synthetic test 1 of 12 fully hidden elements is found.
@@ -151,7 +165,8 @@ Ordered by how much they limit a presentable result.
 - `restoration.include_tier_b` paints tier B without the guess marking (unchanged behaviour, off by
   default).
 - Run folders written before 2026-11-14 keep their old images and legends.
-- The review window was opened and stepped through by a script; it has not been used by a person yet.
+- The review window was used by the author on 2026-11-14 (five decisions, with notes).
+- The review tool offers approve or reject only; choosing another donor for a target is not possible.
 - The decision flow was run once end to end on s01 by a script (approve `t_003`, reject `t_002`, run,
   clear, run): the approved guess was completed in the restoration view, the rejected one withheld in
   both, and after clearing the images were byte-identical to before. The run folder `20261114_150837`
@@ -159,10 +174,11 @@ Ordered by how much they limit a presentable result.
 
 ## 4. Manual work for the author, in order
 
-**Step 1 — decide on the five placed donors.** Changes the result at once; no drawing needed.
+**Step 1 — decide on the four pilasters that wait (`t_001`, `t_004`, `t_005`, `t_007`).** Changes the
+result at once; no drawing needed. The earlier decisions on `t_002`, `t_003`, `t_006` still apply.
 
 ```
-python tools/target_review.py --run outputs/s01_test_church/20261114_150843
+python tools/target_review.py --run outputs/s01_test_church/20261114_164027
 python run.py --structure s01_test_church --from complete --no-review
 ```
 
@@ -200,7 +216,8 @@ items below to build next.
 
 | ID | What | Why it is open |
 |---|---|---|
-| R-029a | extend a fragment's box to the row height so it can take a donor | P6 |
+| — | choose another donor for a target in the review tool (`t_006`) | P2; the alternatives are in `evidence.json` |
+| — | arch leg that stops short of the capital (`t_002`) | P5, P6 |
 | R5c | donor from another photograph of the building | P1; needs registration between photographs |
 | B3 | paired-rhythm (bay) rule | P7 |
 | R-004a to c | seam and score thresholds on more data | P2 |

@@ -59,6 +59,55 @@ def standard_scene() -> Scene:
     return s
 
 
+def short_fragment_scene(strip_damaged: bool = True) -> Scene:
+    """A pilaster whose box covers only its standing upper half, beside a whole one (T33)."""
+    s = Scene()
+    s.add(element("stub", [10, 10, 20, 50], "fragmented", cls="pilaster"), RED)
+    s.damage_box([10, 40, 20, 50])
+    if strip_damaged:
+        s.damage_box([10, 50, 20, 90])
+    s.add(element("whole", [40, 12, 50, 90], "intact", cls="pilaster"), RED)
+    return s
+
+
+class ExtendFragmentBoxTest(unittest.TestCase):
+    def test_short_fragment_gets_the_neighbours_extent_and_a_donor(self) -> None:
+        s = short_fragment_scene()
+        (record,) = evidence.find_tier_a(s.elements, s.rgb, s.damage, settings(), fake_embed)
+        self.assertEqual(record["target_box"], [10, 10, 20, 90])
+        self.assertEqual(record["element_box"], [10, 10, 20, 50])
+        self.assertEqual(record["box_extension"],
+                         {"side": "bottom", "reference_element": "whole", "strip_damage_share": 1.0})
+        self.assertEqual((record["tier"], record["donor_id"]), ("A", "whole"))
+        self.assertEqual(s.elements[0]["box"], [10, 10, 20, 50])          # the inventory record is untouched
+
+    def test_switched_off_keeps_the_drawn_box(self) -> None:
+        s = short_fragment_scene()
+        (record,) = evidence.find_tier_a(s.elements, s.rgb, s.damage, settings(extend_fragment_box=False), fake_embed)
+        self.assertEqual(record["target_box"], [10, 10, 20, 50])
+        self.assertIsNone(record["box_extension"])
+        self.assertEqual(record["tier"], "C")                             # size filter, as before T33
+
+    def test_no_extension_over_surviving_stone(self) -> None:
+        s = short_fragment_scene(strip_damaged=False)
+        (record,) = evidence.find_tier_a(s.elements, s.rgb, s.damage, settings(), fake_embed)
+        self.assertEqual(record["target_box"], [10, 10, 20, 50])
+        self.assertIsNone(record["box_extension"])
+
+    def test_no_extension_when_neither_end_agrees_with_the_neighbour(self) -> None:
+        s = short_fragment_scene()
+        s.elements[0]["box"] = [10, 30, 20, 60]                           # floats inside the neighbour's extent
+        self.assertIsNone(evidence.extend_to_neighbour(s.elements[0], s.elements, s.damage, settings()))
+
+    def test_top_end_is_extended_too(self) -> None:
+        s = Scene()
+        s.add(element("foot", [10, 60, 20, 90], "fragmented", cls="pilaster"), RED)
+        s.damage_box([10, 12, 20, 60])
+        s.add(element("whole", [40, 12, 50, 90], "intact", cls="pilaster"), RED)
+        found = evidence.extend_to_neighbour(s.elements[0], s.elements, s.damage, settings())
+        self.assertEqual((found["box"], found["side"]), ([10, 12, 20, 90], "top"))
+
+
 class TierATest(unittest.TestCase):
     def test_ranking_alternatives_and_filters(self) -> None:
         s = standard_scene()

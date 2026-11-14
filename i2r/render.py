@@ -398,6 +398,8 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
             "class": r["class"],
             "tier": r["tier"],
             "target_box": r["target_box"],
+            "element_box": r.get("element_box"),
+            "box_extension": r.get("box_extension"),
             "area_px": r.get("area_px"),
             "donor_id": r["donor_id"],
             "donor_box": r["donor_box"],

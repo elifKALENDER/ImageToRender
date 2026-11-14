@@ -15,7 +15,7 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: T26 and T28 to T32 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
+- **After v0.1.0: T26 and T28 to T33 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
   failure analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`).
   Phase 3 has no open coding task; what is open is the author's manual input (see `docs/STATUS.md`).** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
@@ -661,7 +661,7 @@ by B2), background 4 of 4 left C (`background__bg01` is no longer tier B), parti
 0. **Left out:** the second chance for `recovered_pilaster_046`-like fragments as tier A. A width-only
 size filter alone would squeeze a full-height donor into the half-height box; doing it properly means
 extending the target box to the row's height, a further rule, and the author asked to keep the structure
-simple. Open as R-029a; until then such a fragment stays tier C ("no usable donor ... size"). 154 tests.*
+simple. Open as R-029a (done later the same day as T33); until then such a fragment stays tier C ("no usable donor ... size"). 154 tests.*
 **What.** `evidence.slot_is_free` should not call a slot free when a same-class fragment stands beside
 it. Proposal: test against the fragment's box extended along the element's long axis to the row's height
 (the fragment box covers only the standing part), or require a minimum centre distance as a share of the
@@ -719,6 +719,30 @@ browser screenshot. 164 tests. Status of the whole and the author's manual work:
 **Files.** `i2r/report.py`, `i2r/render.py`, `tests/test_render.py`.
 **Accept.** The page names every placed target, links the view images and panels of the same folder and
 loads nothing from outside.
+
+### T33. Extend a fragment's box to its row neighbour (added 2026-11-14; was R-029a)
+*Status: done 2026-11-14, on s01 (n = 1). Asked for by the author after the first expert review: `t_001`
+was rejected because the completed pilaster ended short ("its foot should come down to the level of the
+other pilasters"). `evidence.extend_to_neighbour`: before the donor search, a fragment's box takes the
+vertical extent of its nearest intact same-class neighbour at one end, when (1) the other end agrees with
+the neighbour's within `tier_b.row_tolerance` of its height, (2) this end is short by more than that, and
+(3) at least `evidence.extend_min_damage_share` (0.5, not calibrated) of the strip in between is damaged.
+The record keeps the drawn box as `element_box` and the reason as `box_extension`; `elements.json` is not
+changed. Switch: `evidence.extend_fragment_box`.
+Result on s01 (run `20261114_164027`): four pilaster boxes are extended at the bottom (`pilaster_013`
+161 to 198 px, `recovered_pilaster_046` 99 to 214, `recovered_pilaster_020` 132 to 172,
+`expert_pilaster_017` 158 to 192); no arch is (neither end of a fragmented arch agrees with its
+neighbour). `recovered_pilaster_046` and `_020` are tier A for the first time: 20 targets, 7 A, 13 C.
+All four are guesses by the automatic tests. **Side effects:** the placements of `t_001` and `t_007`
+changed, so the author's reject and approve of them are stale and both are guesses again; the
+restoration view completes only `t_003` (847 px) until they are reviewed. `t_005`
+(`recovered_pilaster_020`) has alignment score -0.04: the rule made it a target, it did not make it a
+good one. **Not addressed:** `t_002` (the arch leg does not reach the capital); its box already reaches
+the capital, so this is a matter of placement, not of box height. Synthetic test (28 cases, `eval_20261114_164006`): headline figures unchanged (partial 9 of 12 tier A, full 1 of 12, background 4 of 4 left C, preservation 0; the nine alignment rows identical), which is expected because a synthetic cut leaves the element's box at full height: the rule itself is tested only by unit tests and by the four s01 boxes. 169 tests.*
+**What.** A fragment whose box covers only the standing part should be completed to the full element.
+**Files.** `i2r/evidence.py`, `i2r/render.py`, `i2r/report.py`, `config.yaml`, `tests/test_evidence_a.py`.
+**Accept.** The four short pilasters of s01 get a full-height target box; elements whose strip is
+surviving stone, or that fit no neighbour at either end, keep their box.
 
 ---
 

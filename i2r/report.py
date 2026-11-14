@@ -105,6 +105,11 @@ def target_block(entry: dict) -> str:
         "<div>Why a guess: " + (esc("; ".join(reasons)) if reasons else "&ndash; (passed the automatic tests)") + "</div>",
         f"<div>Expert decision: <b>{expert_text}</b></div>",
     ]
+    ext = entry.get("box_extension")
+    if ext:
+        lines.insert(3, f"<div class=meta>box extended at the {esc(ext['side'])} from {esc(entry.get('element_box'))} to "
+                        f"{esc(entry['target_box'])}, the extent of <code>{esc(ext['reference_element'])}</code> "
+                        f"(strip in between {num(ext['strip_damage_share'])} damaged)</div>")
     if place.get("panel"):
         lines.append(f'<a href="{esc(place["panel"])}"><img src="{esc(place["panel"])}" '
                      f'alt="photograph, damage mask, donor as placed, result"></a>')

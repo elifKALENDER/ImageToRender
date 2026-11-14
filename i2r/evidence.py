@@ -203,6 +203,42 @@ def no_donor_reason(element_class: str, rejected: list[dict[str, str]]) -> str:
     return f"no usable donor of class {element_class!r}: {parts}"
 
 
+def extend_to_neighbour(target: dict, elements: list[dict], damage: np.ndarray, ecfg: dict) -> dict | None:
+    """Vertical extension of a fragment's box to the extent of its nearest intact same-class neighbour
+    (T33). A fragment's box often covers only the standing part; the donor would then be squeezed into
+    it and the completed element ends short. The box is extended at one end when
+
+    - the other end agrees with the neighbour's within ``tier_b.row_tolerance`` of the neighbour's
+      height (the fragment belongs to that row),
+    - this end is short of the neighbour's by more than that tolerance, and
+    - at least ``extend_min_damage_share`` of the strip in between is damaged (the element is cut
+      there by the damage, it does not simply end).
+
+    Returns None or {"box", "side", "reference_element", "strip_damage_share"}. ``elements.json`` is not
+    changed; the extended box is the target box of the evidence record."""
+    x1, y1, x2, y2 = target["box"]
+    cx = (x1 + x2) / 2.0
+    row = [e for e in elements
+           if e["id"] != target["id"] and e["class"] == target["class"] and not e.get("rejected")
+           and e.get("damage_status") == "intact" and min(y2, e["box"][3]) > max(y1, e["box"][1])]
+    if not row:
+        return None
+    ref = min(row, key=lambda e: abs((e["box"][0] + e["box"][2]) / 2.0 - cx))
+    ry1, ry2 = ref["box"][1], ref["box"][3]
+    tol = float(ecfg["tier_b"]["row_tolerance"]) * (ry2 - ry1)
+    top_ok, bottom_ok = abs(y1 - ry1) <= tol, abs(y2 - ry2) <= tol
+    if top_ok and not bottom_ok and y2 < ry2:
+        side, strip, box = "bottom", damage[y2:ry2, x1:x2], [x1, y1, x2, ry2]
+    elif bottom_ok and not top_ok and y1 > ry1:
+        side, strip, box = "top", damage[ry1:y1, x1:x2], [x1, ry1, x2, y2]
+    else:
+        return None
+    share = float((strip > 0).mean()) if strip.size else 0.0
+    if share < float(ecfg["extend_min_damage_share"]):
+        return None
+    return {"box": box, "side": side, "reference_element": ref["id"], "strip_damage_share": round(share, 4)}
+
+
 def find_tier_a(
     elements: list[dict[str, Any]],
     rgb: np.ndarray,
@@ -217,10 +253,14 @@ def find_tier_a(
     # 1. Filter donors and collect every crop to embed, so the model runs in a few batches.
     crops: list[np.ndarray] = []
     plans = []
-    for target in targets:
+    for element in targets:
+        extension = extend_to_neighbour(element, elements, damage, ecfg) if ecfg["extend_fragment_box"] else None
+        # the element record is not changed: filters and crops see a copy with the extended box
+        target = {**element, "box": extension["box"]} if extension else element
         t_img, hole = target_crop(rgb, damage, target["box"])
         visible = float((~hole).mean())
-        plan = {"target": target, "visible": visible, "rejected": [], "pairs": [], "t_index": None}
+        plan = {"target": target, "visible": visible, "rejected": [], "pairs": [], "t_index": None,
+                "element_box": element["box"], "extension": extension}
         if visible < float(ecfg["min_visible_fraction"]) or visible == 0.0:
             plans.append(plan)
             continue
@@ -268,6 +308,9 @@ def find_tier_a(
             "element_id": target["id"],
             "class": target["class"],
             "target_box": target["box"],
+            "element_box": plan["element_box"],
+            "box_extension": ({k: v for k, v in plan["extension"].items() if k != "box"}
+                              if plan["extension"] else None),
             "visible_fraction": round(plan["visible"], 4),
         }
         if plan["t_index"] is None:
@@ -902,6 +945,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         "model": {"id": ecfg["dino_model_id"], "pooling": ecfg["pooling"], "crop_px": ecfg["crop_px"],
                   "device": embedder.device, "fp16": embedder.fp16},
         "settings": {**{k: ecfg[k] for k in ("min_similarity", "min_visible_fraction", "size_tolerance",
+                                            "extend_fragment_box", "extend_min_damage_share",
                                             "alternatives_kept", "try_flipped_donor", "mask_donor_like_target")},
                      "tier_b": ecfg["tier_b"]},
         "summary": {"targets": len(records), "by_tier": by_tier, "by_class": by_class,
