@@ -224,6 +224,29 @@ class GenerativeMarkingTest(unittest.TestCase):
         self.assertIn(render.AI_GUESS_LEGEND, texts)
         self.assertFalse(any("hatched" in t for t in texts))
 
+    def test_open_damage_outside_the_facade_has_its_own_hatch_and_legend(self) -> None:
+        rcfg = load_config()["restoration"]
+        completed = np.full((40, 60, 3), 100, np.uint8)
+        labels = np.zeros((40, 60), np.uint16)
+        damage = np.zeros((40, 60), np.uint8)
+        damage[5:35, 5:55] = 1
+        facade = np.ones((40, 60), np.uint8)
+        facade[20:, :] = 0                                         # rows 20 and below: the ground
+        marked, counts = render.mark_view(completed, damage, labels, [], {}, rcfg, facade=facade)
+        self.assertEqual(counts["open_no_evidence_px"], 15 * 50)
+        self.assertEqual(counts["open_outside_facade_px"], 15 * 50)
+        red, grey = rcfg["hatch_color"], rcfg["hatch_color_outside"]
+        top, bottom = marked[5:20, 5:55].reshape(-1, 3), marked[20:35, 5:55].reshape(-1, 3)
+        self.assertTrue(np.any(np.all(top == red, axis=-1)) and not np.any(np.all(top == grey, axis=-1)))
+        self.assertTrue(np.any(np.all(bottom == grey, axis=-1)) and not np.any(np.all(bottom == red, axis=-1)))
+        # the hatch lines are where they were without a limit; only their colour differs outside it
+        plain, _ = render.mark_view(completed, damage, labels, [], {}, rcfg)
+        self.assertTrue(np.array_equal(np.any(marked != completed, axis=-1), np.any(plain != completed, axis=-1)))
+        texts = legend_texts(rcfg, counts)
+        self.assertIn(render.OUTSIDE_FACADE_LEGEND, texts)
+        self.assertIn("hatched: no evidence", texts)
+        self.assertNotIn(render.OUTSIDE_FACADE_LEGEND, legend_texts(rcfg, {**counts, "open_outside_facade_px": 0}))
+
     def test_legend_lists_only_what_occurs(self) -> None:
         rcfg = load_config()["restoration"]
         zero = {"completed_px": 0, "ai_guess_px": 0, "open_tier_b_px": 0, "open_no_evidence_px": 0}

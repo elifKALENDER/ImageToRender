@@ -150,5 +150,49 @@ class TierCTest(unittest.TestCase):
         self.assertEqual(records, [])
 
 
+class FacadeLimitTest(unittest.TestCase):
+    """T27: damage outside the facade limit is its own kind of tier C region."""
+
+    def elements(self) -> list[dict]:
+        return [el("a", "arch", 60, 50), el("b", "arch", 200, 50), el("c", "base", 130, 120, w=160, h=20)]
+
+    def test_hull_of_the_element_boxes(self) -> None:
+        facade, used = evidence.facade_from_hull(self.elements(), (H, W), 0, 3)
+        self.assertEqual(used, 3)
+        self.assertEqual(facade[50, 130], 1)            # between the elements
+        self.assertEqual(facade[129, 130], 1)           # lowest row of the lowest box
+        self.assertEqual(facade[130, 130], 0)           # one row below it
+        self.assertEqual(facade[150, 130], 0)           # the ground
+        grown, _ = evidence.facade_from_hull(self.elements(), (H, W), 5, 3)
+        self.assertEqual(grown[134, 130], 1)
+        self.assertEqual(grown[150, 130], 0)
+
+    def test_rejected_elements_do_not_count_and_too_few_give_no_limit(self) -> None:
+        elements = self.elements()
+        elements[2]["rejected"] = True
+        facade, used = evidence.facade_from_hull(elements, (H, W), 0, 3)
+        self.assertIsNone(facade)
+        self.assertEqual(used, 2)
+
+    def test_mask_reaching_below_the_hull_is_split(self) -> None:
+        facade, _ = evidence.facade_from_hull(self.elements(), (H, W), 0, 3)
+        damage = damaged([100, 60, 140, 170])           # from the wall down across the base onto the ground
+        records, masks = evidence.tier_c_regions(damage, [], min_region_px=64, facade=facade)
+        self.assertEqual([r["kind"] for r in records], ["uncovered_region", "outside_facade"])
+        inside, outside = records
+        self.assertEqual(inside["target_box"], [100, 60, 140, 130])
+        self.assertEqual(outside["target_box"], [100, 130, 140, 170])
+        self.assertEqual(outside["area_px"], 40 * 40)
+        self.assertEqual((outside["tier"], outside["confidence"], outside["donor_id"]), ("C", 0.0, None))
+        self.assertIn("outside the facade limit", outside["reason"])
+        self.assertFalse((masks[0] & masks[1]).any())
+        self.assertEqual(int(masks[0].sum() + masks[1].sum()), int(damage.sum()))
+
+    def test_without_a_limit_nothing_changes(self) -> None:
+        damage = damaged([100, 60, 140, 170])
+        records, _ = evidence.tier_c_regions(damage, [], min_region_px=64)
+        self.assertEqual([r["kind"] for r in records], ["uncovered_region"])
+
+
 if __name__ == "__main__":
     unittest.main()

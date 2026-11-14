@@ -46,6 +46,10 @@ COMPLETION_FILE = "completion.json"
 DAMAGE_MASK = "damage_mask.png"
 
 
+OUTSIDE_FACADE = "outside_facade"    # evidence record kind: damage pixels outside the facade limit (T27)
+OUTSIDE_FACADE_REASON = "tier C: outside the facade limit; not part of the building, never filled"
+
+
 class PreservationError(ContractError):
     """A pixel outside the damage mask was changed."""
 
@@ -62,6 +66,8 @@ def rule_restoration(record: dict, config: dict) -> tuple[bool, str]:
         if config["restoration"]["include_tier_b"]:
             return True, "tier B: included by restoration.include_tier_b"
         return False, "tier B: position implied, not restored (Venice Charter, §5.3)"
+    if record.get("kind") == OUTSIDE_FACADE:
+        return False, OUTSIDE_FACADE_REASON
     return False, "tier C: no evidence"
 
 
@@ -71,6 +77,8 @@ def rule_first_construction(record: dict, config: dict) -> tuple[bool, str]:
         return True, "tier A: direct evidence"
     if tier == "B":
         return True, "tier B: positional evidence"
+    if record.get("kind") == OUTSIDE_FACADE:
+        return False, OUTSIDE_FACADE_REASON
     if config["first_construction"]["generative"]:
         return False, "tier C: no donor; covered by the single generative pass (provenance: generative_fill)"
     return False, "tier C: no evidence; generative fill off (first_construction.generative: false)"
@@ -422,11 +430,12 @@ def generative_fill(image: np.ndarray, area: np.ndarray, config: dict, log) -> t
 def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[dict],
                   donor_masks: dict[str, np.ndarray], config: dict,
                   generate: Callable[[np.ndarray, np.ndarray, dict], tuple[np.ndarray, dict]] | None = None,
-                  ) -> tuple[np.ndarray, np.ndarray, dict]:
+                  facade: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray, dict]:
     """Apply one view's rule. Returns (completed image, uint16 label image, report).
 
     ``generate(image, open_area, config) -> (image, info)`` is the tier C pass; it runs only for the
-    first-construction view when ``first_construction.generative`` is true."""
+    first-construction view when ``first_construction.generative`` is true. Open damage pixels outside
+    ``facade`` (1 inside; the evidence step's facade limit) are never given to it."""
     rule = VIEW_RULES[view]
     ccfg = config["complete"]
     out = rgb.copy()
@@ -457,6 +466,10 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
     generative = None
     if view == "first_construction" and config["first_construction"]["generative"] and generate is not None:
         area = open_area(damage, labels)
+        excluded = 0
+        if facade is not None:
+            excluded = int((area & (facade == 0)).sum())
+            area &= facade > 0
         if area.any():
             before = out.copy()
             filled, info = generate(out, area, config)
@@ -464,6 +477,7 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
             label_names[str(label)] = GENERATIVE_LABEL_NAME
             info["label"] = label
             info["pixels_changed"] = paste_area(out, labels, filled, area, label)
+            info["excluded_outside_facade_px"] = excluded
             # the pass may change only the open area (accept criterion of T21)
             if np.any(np.any(before != out, axis=-1) & ~area):
                 raise PreservationError(f"[{view}] generative fill changed pixels outside the open area")
@@ -498,6 +512,20 @@ def load_donor_masks(run: "Run", elements: list[dict], records: list[dict], size
     return masks
 
 
+def load_facade_mask(run: "Run", evidence: dict, shape: tuple[int, int]) -> np.ndarray | None:
+    """The facade limit the evidence step wrote for this run (1 inside), or None when it set none."""
+    name = (evidence.get("facade") or {}).get("mask_file")
+    if not name:
+        return None
+    path = run.path(name)
+    if not path.is_file():
+        raise ContractError(f"evidence.json names the facade mask {name!r}, which is not in the run folder")
+    mask = np.asarray(Image.open(path).convert("L")) >= 128
+    if mask.shape != shape:
+        raise ContractError(f"{path}: size differs from the damage mask")
+    return mask.astype(np.uint8)
+
+
 def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     log = run.logger
     evidence = read_json(run.path("evidence.json"))
@@ -518,6 +546,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         raise ContractError(f"{mask_path}: size differs from {run.image_path}")
     size = (rgb.shape[1], rgb.shape[0])
     donor_masks = load_donor_masks(run, elements, records, size)
+    facade = load_facade_mask(run, evidence, damage.shape)
 
     report: dict[str, Any] = {"structure_id": run.structure_id, "views": {}}
     for view in getattr(opts, "views", ["restoration"]):
@@ -528,7 +557,8 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         def generate(image: np.ndarray, area: np.ndarray, config: dict) -> tuple[np.ndarray, dict]:
             return generative_fill(image, area, config, log)
 
-        out, labels, view_report = complete_view(view, rgb, damage, records, donor_masks, run.config, generate)
+        out, labels, view_report = complete_view(view, rgb, damage, records, donor_masks, run.config, generate,
+                                                 facade)
         gen = view_report.get("generative")
         if gen is not None:
             debug = gen.pop("debug")

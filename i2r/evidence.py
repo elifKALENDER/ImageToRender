@@ -29,18 +29,23 @@ Tier B, implied slots with no visible fragment (geometry only, ``TIER_B_RULES``)
         agreement is below ``symmetry_min_agreement``.
 Tier C: every damage pixel outside all A and B target boxes, as connected regions of at least
 ``damage.min_region_px``, confidence 0. Fragmented elements without a donor are also tier C records.
+Facade limit (T27): an author's ``facade_mask.png`` in the building's folder, else the convex hull of the
+element boxes (``evidence.facade_limit``). Tier C regions outside it have kind ``outside_facade``: not
+"no evidence" but "not part of the building"; the generative fill never receives them.
 
 This module never edits elements.json.
 
 Output in the run folder:
     evidence.json          one record per target, every candidate with its score or rejection reason
     evidence_c_regions/    one 0/255 mask per tier C region
+    facade_mask.png        the facade limit used (white = facade); absent when there is none
     evidence_overlay.png   donor -> target arrows (green A, blue B), tier C hatched grey
     evidence_sheet.png     per A or B target: target crop, chosen donor as transferred, alternatives
 """
 from __future__ import annotations
 
 import gc
+import hashlib
 import shutil
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Optional
@@ -61,6 +66,7 @@ EVIDENCE_FILE = "evidence.json"
 OVERLAY = "evidence_overlay.png"
 SHEET = "evidence_sheet.png"
 DAMAGE_MASK = "damage_mask.png"      # copy written by the damage step
+FACADE_MASK = "facade_mask.png"      # facade limit of this run (white = facade); read by complete and render
 
 TIER_A, TIER_B, TIER_C = "A", "B", "C"
 C_REGION_DIR = "evidence_c_regions"
@@ -561,25 +567,54 @@ def find_tier_b(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[l
 # Tier C regions
 # ---------------------------------------------------------------------------
 
-def tier_c_regions(damage: np.ndarray, covered_boxes: list[list[int]], min_region_px: int
-                   ) -> tuple[list[dict], list[np.ndarray]]:
-    """Damage pixels outside every A and B target box, as connected regions (largest first)."""
+REGION_KINDS = ("uncovered_region", "outside_facade")
+OUTSIDE_REASON = "damage pixels outside the facade limit: not treated as part of the building, never filled"
+
+
+def facade_from_hull(elements: list[dict], shape: tuple[int, int], margin_px: int, min_elements: int
+                     ) -> tuple[np.ndarray | None, int]:
+    """Facade limit as the filled convex hull of the non-rejected element boxes, grown by ``margin_px``
+    (1 inside, 0 outside). None when fewer than ``min_elements`` boxes exist. Also returns the box count.
+
+    A proxy, not a drawing of the facade: it follows the inventory, so ground covered by an element box
+    (a base course behind rubble) stays inside it. An author's facade mask replaces it (``load_facade``)."""
+    boxes = [e["box"] for e in elements if not e.get("rejected")]
+    if len(boxes) < max(1, min_elements):
+        return None, len(boxes)
+    corners = np.array([[x, y] for b in boxes for x in (b[0], b[2] - 1) for y in (b[1], b[3] - 1)], dtype=np.int32)
+    inside = np.zeros(shape, dtype=np.uint8)
+    cv2.fillConvexPoly(inside, cv2.convexHull(corners), 1)
+    if margin_px > 0:
+        k = 2 * int(margin_px) + 1
+        inside = cv2.dilate(inside, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    return inside, len(boxes)
+
+
+def tier_c_regions(damage: np.ndarray, covered_boxes: list[list[int]], min_region_px: int,
+                   facade: np.ndarray | None = None) -> tuple[list[dict], list[np.ndarray]]:
+    """Damage pixels outside every A and B target box, as connected regions (largest first).
+
+    With a ``facade`` limit (1 inside) the pixels outside it form their own regions of kind
+    ``outside_facade``, listed after the ``uncovered_region`` ones."""
     remaining = damage.astype(bool).copy()
     for x1, y1, x2, y2 in covered_boxes:
         remaining[y1:y2, x1:x2] = False
-    n, labels, stats, _ = cv2.connectedComponentsWithStats(remaining.astype(np.uint8), connectivity=8)
-    parts = sorted((int(stats[i][4]), i) for i in range(1, n) if stats[i][4] >= min_region_px)[::-1]
+    inside = remaining if facade is None else remaining & (facade > 0)
     records, masks = [], []
-    for area, i in parts:
-        x, y, w, h = (int(v) for v in stats[i][:4])
-        records.append({
-            "kind": "uncovered_region", "rule": None, "element_id": None, "class": None,
-            "tier": TIER_C, "reason": "no element evidence for these damage pixels",
-            "target_box": [x, y, x + w, y + h], "area_px": area,
-            "donor_id": None, "donor_box": None, "flipped": None,
-            "similarity": None, "confidence": 0.0, "alternatives": [],
-        })
-        masks.append((labels == i).astype(np.uint8))
+    for kind, reason, pixels in (("uncovered_region", "no element evidence for these damage pixels", inside),
+                                 ("outside_facade", OUTSIDE_REASON, remaining & ~inside)):
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(pixels.astype(np.uint8), connectivity=8)
+        parts = sorted((int(stats[i][4]), i) for i in range(1, n) if stats[i][4] >= min_region_px)[::-1]
+        for area, i in parts:
+            x, y, w, h = (int(v) for v in stats[i][:4])
+            records.append({
+                "kind": kind, "rule": None, "element_id": None, "class": None,
+                "tier": TIER_C, "reason": reason,
+                "target_box": [x, y, x + w, y + h], "area_px": area,
+                "donor_id": None, "donor_box": None, "flipped": None,
+                "similarity": None, "confidence": 0.0, "alternatives": [],
+            })
+            masks.append((labels == i).astype(np.uint8))
     return records, masks
 
 
@@ -656,7 +691,7 @@ def draw_overlay(rgb: np.ndarray, damage: np.ndarray, records: list[dict[str, An
         for m in c_masks:
             out[(m > 0) & hatch] = GREY
     for r in records:
-        if r["kind"] == "uncovered_region":
+        if r["kind"] in REGION_KINDS:
             continue
         color = TIER_COLOR[r["tier"]]
         x1, y1, x2, y2 = r["target_box"]
@@ -676,7 +711,7 @@ def draw_sheet(rgb: np.ndarray, damage: np.ndarray, records: list[dict[str, Any]
     """Rows: fragment (hole tinted) | chosen donor as transferred | alternatives."""
     rows = []
     for r in records:
-        if r["kind"] == "uncovered_region":
+        if r["kind"] in REGION_KINDS:
             continue
         box = r["target_box"]
         tw, th = box[2] - box[0], box[3] - box[1]
@@ -717,6 +752,41 @@ def draw_sheet(rgb: np.ndarray, damage: np.ndarray, records: list[dict[str, Any]
 # Step
 # ---------------------------------------------------------------------------
 
+FACADE_LIMITS = ("hull", "none")
+
+
+def load_facade(run: "Run", elements: list[dict], damage: np.ndarray, ecfg: dict) -> tuple[np.ndarray | None, dict]:
+    """The facade limit of this run (1 inside) and its record for evidence.json.
+
+    An author's mask in the structure folder (``paths.facade_mask_file``, white = facade) wins; otherwise
+    ``evidence.facade_limit``: ``hull`` (convex hull of the element boxes) or ``none``."""
+    limit = ecfg["facade_limit"]
+    if limit not in FACADE_LIMITS:
+        raise ContractError(f"config evidence.facade_limit: {limit!r}; expected one of {', '.join(FACADE_LIMITS)}")
+    info: dict[str, Any] = {"source": "none", "mask_file": None}
+    facade = None
+    author = run.structure_dir / run.config["paths"].get("facade_mask_file", FACADE_MASK)
+    if author.is_file():
+        image = Image.open(author).convert("L")
+        if image.size != (damage.shape[1], damage.shape[0]):
+            raise ContractError(f"{author}: size {image.size} differs from the photograph")
+        facade = (np.asarray(image) >= 128).astype(np.uint8)
+        info.update({"source": "author_mask", "file": author.name,
+                     "sha256": hashlib.sha256(author.read_bytes()).hexdigest()})
+    elif limit == "hull":
+        margin, minimum = int(ecfg["facade_hull_margin_px"]), int(ecfg["facade_hull_min_elements"])
+        facade, used = facade_from_hull(elements, damage.shape, margin, minimum)
+        info.update({"source": "element_hull" if facade is not None else "none", "margin_px": margin,
+                     "elements_used": used})
+        if facade is None:
+            info["reason"] = f"fewer than {minimum} element boxes; no facade limit"
+    if facade is not None:
+        info["mask_file"] = FACADE_MASK
+        info["facade_px"] = int(facade.sum())
+        info["damage_px_outside"] = int(((damage > 0) & (facade == 0)).sum())
+    return facade, info
+
+
 def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     log = run.logger
     ecfg = run.config["evidence"]
@@ -742,7 +812,12 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     a_records = records
     b_records, b_diag = find_tier_b(elements, damage, ecfg["tier_b"])
     covered = [r["target_box"] for r in a_records if r["tier"] == TIER_A] + [r["target_box"] for r in b_records]
-    c_records, c_masks = tier_c_regions(damage, covered, int(run.config["damage"]["min_region_px"]))
+    facade, facade_info = load_facade(run, elements, damage, ecfg)
+    if facade is not None:
+        Image.fromarray(facade * 255, mode="L").save(run.path(FACADE_MASK))
+    elif run.path(FACADE_MASK).exists():
+        run.path(FACADE_MASK).unlink()            # copied from an earlier run by --from; no limit in this one
+    c_records, c_masks = tier_c_regions(damage, covered, int(run.config["damage"]["min_region_px"]), facade)
     records = a_records + b_records + c_records
     for number, r in enumerate(records, start=1):
         r["target_id"] = f"t_{number:03d}"
@@ -764,6 +839,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     flagged = [r["target_id"] for r in records if r.get("donor_expert_prototype") is False]
     damage_px = int(damage.sum())
     c_px = int(sum(int(m.sum()) for m in c_masks))
+    outside_px = int(sum(int(m.sum()) for r, m in zip(c_records, c_masks) if r["kind"] == "outside_facade"))
     write_json(run.path(EVIDENCE_FILE), {
         "structure_id": run.structure_id,
         "image_size": doc["image_size"],
@@ -779,7 +855,10 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
                     "damage_px": damage_px,
                     "tier_c_region_px": c_px,
                     "tier_c_share_of_damage": round(c_px / damage_px, 4) if damage_px else 0.0,
+                    "outside_facade_regions": sum(1 for r in c_records if r["kind"] == "outside_facade"),
+                    "outside_facade_region_px": outside_px,
                     "donor_not_marked_as_prototype_by_expert": flagged},
+        "facade": facade_info,
         "tier_b_diagnostics": b_diag,
         "targets": records,
     })
@@ -810,6 +889,9 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
             log.info("[evidence] %s off: %s", name, diag["reason"])
     log.info("[evidence] tier C: %d region(s), %.1f %% of the damage pixels", len(c_records),
              100 * c_px / damage_px if damage_px else 0.0)
+    log.info("[evidence] facade limit: %s; %s damage px outside it (%d px in %d region(s) of kind outside_facade)",
+             facade_info["source"], facade_info.get("damage_px_outside", 0), outside_px,
+             sum(1 for r in c_records if r["kind"] == "outside_facade"))
     if flagged:
         log.info("[evidence] donors the expert did not mark usable_as_prototype: %s", flagged)
     run.meta["steps"].setdefault("evidence", {})["summary"] = {"targets": len(records), "by_tier": by_tier}

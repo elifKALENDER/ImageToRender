@@ -15,8 +15,9 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: T26 is done (2026-11-14); the next task is T27** (Phase 3, fixes from
-  `docs/FAILURE_ANALYSIS.md`); T27 to T30 are open and none is started. Author decision
+- **After v0.1.0: T26 is done (2026-11-14). T27: the mechanism is done, but point 5 of the failure analysis
+  is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`). The next task
+  is T28** (Phase 3, fixes from `docs/FAILURE_ANALYSIS.md`); T28 to T30 are not started. Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
   skipped. Everything is developed, tuned and reported on s01 (n = 1 building). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
@@ -531,7 +532,7 @@ run the demo on s01. Fix anything missing. Merge to `main` and tag `v0.1.0`.
 
 ## Phase 3 — Fixes from the failure analysis (after v0.1.0)
 
-*Status: T26 done; T27 to T30 open, none started. Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
+*Status: T26 done; T27 mechanism done, one acceptance item open (author); T28 to T30 not started. Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
 visual review of the s01 first-construction output with the generative fill on. Order set by the author:
 T26 (legend and labels), T27 (mask reaching the ground), T28 (alignment acceptance), T29 (slot rule), T30
 (logging). Section numbers such as "§8.3" in these five tasks refer to `docs/FAILURE_ANALYSIS.md`.
@@ -568,6 +569,30 @@ after. Tests for each.
 **Size.** S.
 
 ### T27. Keep the fill off the ground (b)
+*Status: mechanism done 2026-11-14 with the convex hull (author's choice); **one acceptance item is not
+met on s01: the lobe at point 5 is still filled.** What exists: the evidence step sets a facade limit and
+writes it as `facade_mask.png` in the run folder: a `facade_mask.png` in the building's folder if the
+author supplies one, else `evidence.facade_limit: hull` (convex hull of the non-rejected element boxes,
+`facade_hull_margin_px` 0) or `none`. Damage pixels outside it become tier C records of kind
+`outside_facade` (listed after the other regions, so earlier target IDs stay), are never given to
+`generative_fill` (`excluded_outside_facade_px` in `completion.json`), and are hatched grey with the legend
+line "outside the facade limit, not filled". `provenance.json` has the limit under `facade` and the
+regions with `area_px`. Deviation from the text: the hatch colour of that area changes too, not only the
+legend, because two legend lines with one colour could not be told apart.
+Result on s01 (n = 1; runs `20261114_112130` fill off, `20261114_112408` fill on):
+4,811 of 100,358 damage px (4.8 %) lie outside the hull, in 3 regions: 4,193 px at the lower right
+(x 532-591, y 546-692), 438 px under the lower-left lobe (y 711-724), 180 px at the left edge. Fill on:
+0 generated px outside the limit, 84,200 generated (88,991 before). Fill off: the completed and source
+images of both views are byte-identical to the reference `20261112_141348`; the marked views differ only
+inside the outside-facade area and in the legend. Synthetic test (28 cases): table identical with the
+limit on and off.
+**Not solved by the hull:** point 5 (145, 694) is inside it, because the box of `expert_base_022` covers
+that ground, so the lobe is generated as before; only its lowest 13 rows are excluded. The hull follows
+the inventory, not the building: it also cuts the lower-right region, which the author has not judged
+(ground, or the foot of the apse?), and 20 donor pixels lie outside it (donor transfer is not limited by
+it). **[needs author]** either redraw the lower-left lobe of the damage mask, or draw
+`data/structures/s01_test_church/facade_mask.png` (white = facade; same size as the photograph), which
+replaces the hull without a code change. 143 tests.*
 **What.** Give the pipeline a notion of "outside the facade". Options to decide when starting: a
 per-structure `facade_mask.png` or ground line in `structure.yaml` drawn by the author, or the convex hull
 of the element boxes (already used in `tools/synthetic_damage.py`). Damage pixels outside it become a

@@ -207,6 +207,31 @@ class GenerativeTest(unittest.TestCase):
                                                               {"donor": donor_mask}, config())[0][~area & (labels != gen["label"])]))
         self.assertTrue(np.array_equal(out[damage == 0], rgb[damage == 0]))
 
+    def test_generative_pass_never_gets_pixels_outside_the_facade(self) -> None:
+        rgb, damage, donor_mask, _ = scene()
+        damage[75:85, 5:30] = 1                       # open damage: rows 75-79 on the facade, 80-84 on the ground
+        facade = np.ones_like(damage)
+        facade[80:, :] = 0
+        cfg = config()
+        cfg["first_construction"]["generative"] = True
+        calls: list = []
+        out, labels, report = complete.complete_view("first_construction", rgb, damage, [record("A")],
+                                                     {"donor": donor_mask}, cfg, fake_generate(calls), facade)
+        gen = report["generative"]
+        self.assertFalse(calls[0][80:, :].any())
+        self.assertTrue(calls[0][75:80, 5:30].all())
+        self.assertEqual(gen["excluded_outside_facade_px"], 5 * 25)
+        self.assertEqual(int((labels[80:, :] == gen["label"]).sum()), 0)
+        self.assertTrue(np.array_equal(out[80:85, 5:30], rgb[80:85, 5:30]))     # the ground stays the photograph
+        self.assertTrue(np.all(out[75:80, 5:30] == 200))
+
+    def test_outside_facade_records_are_never_completed(self) -> None:
+        outside = {**record("C", "t_009", [5, 80, 30, 85], donor=None, confidence=0.0), "kind": "outside_facade"}
+        for view in ("restoration", "first_construction"):
+            do_it, why = complete.VIEW_RULES[view](outside, config())
+            self.assertFalse(do_it)
+            self.assertIn("outside the facade limit", why)
+
     def test_restoration_is_identical_with_and_without_the_generative_pass(self) -> None:
         rgb, damage, donor_mask, _ = scene()
         damage[75:85, 5:30] = 1

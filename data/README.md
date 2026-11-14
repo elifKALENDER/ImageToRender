@@ -7,6 +7,7 @@ One folder per building: `data/structures/<id>/`.
 | `image.png` | Yes | The photograph, RGB. |
 | `damage_mask.png` | Yes | Single channel, same size as the image. White (255) = damaged or missing, black (0) = intact. Draw it with `tools/mask_editor.py`. |
 | `SOURCE.md` | Yes | Building, location, photographer, source URL, licence, date obtained. Write "Unknown" rather than leaving a field empty. |
+| `facade_mask.png` | No | Single channel, same size as the image. White (255) = the building's facade, black (0) = ground, sky, rock. Damage pixels outside it are never filled and are hatched as "outside the facade limit". Without the file the limit is the convex hull of the element boxes (`evidence.facade_limit`), which follows the inventory and keeps ground covered by an element box. Can be drawn with `tools/mask_editor.py --image ... --out ...`. |
 | `structure.yaml` | No | Settings that differ from `config.yaml` for this building only (same layout, only the keys that differ). State the reason in a comment. |
 
 A known vertical symmetry axis is given in `structure.yaml` as `evidence.tier_b.symmetry_axis_x`

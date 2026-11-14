@@ -23,6 +23,7 @@ scale:
     - restoration.hatch_spacing_px
     - restoration.hatch_width_px
     - restoration.hatch_width_b_px
+    - evidence.facade_hull_margin_px
     - restoration.text_scale
     - first_construction.guess_stripe_spacing_px
     - first_construction.guess_stripe_width_px
@@ -41,6 +42,7 @@ paths:
   output_root: outputs             # runs go to outputs/<structure_id>/<timestamp>/
   image_file: image.png
   damage_mask_file: damage_mask.png
+  facade_mask_file: facade_mask.png  # optional, per building: white = facade; replaces the hull (evidence.facade_limit)
 
 # Architectural element classes (docs/ARCHITECTURE.md §1).
 # `prompts` are the OWL-ViT text queries. Short, common English words work better than long
@@ -171,6 +173,13 @@ evidence:
   mask_donor_like_target: true
   use_fp16_if_cuda: true
   batch_size: 16
+  # Facade limit (T27): damage pixels outside it are tier C records of kind outside_facade, are never
+  # given to the generative fill and are hatched in their own colour. "hull" = convex hull of the element
+  # boxes, a proxy that follows the inventory (ground covered by an element box stays inside); "none" =
+  # no limit. A facade_mask.png in the building's folder (paths.facade_mask_file) replaces either.
+  facade_limit: hull
+  facade_hull_margin_px: 0          # the hull is grown by this much; not calibrated
+  facade_hull_min_elements: 3       # with fewer element boxes there is no hull and no limit
   tier_b:
     rows_enabled: true              # B1: gap in a row of same-class elements
     # Centre/height agreement and spacing multiple. Kept in T20 (RND-002): 0.10 and 0.15 give the same result;
@@ -222,6 +231,7 @@ restoration:
   hatch_width_b_px: 2               # tier B hatch: wider, so it reads over dark interiors and differs from C
   text_scale: 1.0                   # OpenCV font scale factor for labels, legend and bar (scaled with the image)
   hatch_color: [220, 60, 60]        # tier C: no evidence
+  hatch_color_outside: [170, 170, 170]  # damage outside the facade limit: not part of the building (grey)
   hatch_color_b: [90, 180, 255]     # tier B when not restored: position implied (light blue, reads on dark)
   label: "AI proposal, not a restoration decision"
 
