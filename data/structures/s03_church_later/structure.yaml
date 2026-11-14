@@ -1,0 +1,7 @@
+# Settings that differ from config.yaml for this building only.
+detect:
+  # Same building as s01_test_church, so the same decision (RND-001): the supports of this blind arcade
+  # are engaged (attached to the wall), and the detector labels them "column"; every "column" detection
+  # is treated as a pilaster. Taken over from s01, not re-measured on this photograph.
+  class_merge:
+    column: pilaster
