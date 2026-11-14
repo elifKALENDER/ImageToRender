@@ -66,6 +66,35 @@ class TierB1Test(unittest.TestCase):
         targets, _ = evidence.find_tier_b(elements, damage, bcfg(symmetry_enabled=False))
         self.assertEqual(targets, [])
 
+    def test_a_fragment_off_the_grid_stops_the_whole_gap(self) -> None:
+        # arches at 50, 100, (150 missing), 200, 250; a half-height fragment stands at x = 165, between the
+        # neighbours 100 and 200 but 0.3 spacings away from the implied position 150
+        elements = row_of_five(skip=2) + [el("stump", "arch", 165, 60, h=20, status="fragmented")]
+        damage = damaged([130, 40, 190, 100])
+        targets, diag = evidence.find_tier_b(elements, damage, bcfg(symmetry_enabled=False))
+        self.assertEqual(targets, [])
+        row = next(r for r in diag["B1"]["rows"] if "arch_1" in r["elements"])     # the stump is a row of its own
+        gap = row["gaps_not_interpolated"][0]
+        self.assertEqual((gap["between"], gap["element_id"], gap["slots_implied"]), (["arch_1", "arch_3"], "stump", 1))
+        self.assertIn("equal spacing does not hold", gap["reason"])
+
+    def test_a_fragment_on_the_grid_takes_its_slot(self) -> None:
+        # arches at 50, 100, 250: a gap of 3 spacings; the fragment stands on the first implied position (150)
+        elements = [el("arch_0", "arch", 50, 70), el("arch_1", "arch", 100, 70), el("arch_4", "arch", 250, 70),
+                    el("stump", "arch", 151, 60, h=20, status="fragmented")]
+        damage = damaged([130, 40, 230, 100])
+        targets, diag = evidence.find_tier_b(elements, damage, bcfg(symmetry_enabled=False))
+        self.assertEqual([t["target_box"] for t in targets], [[190, 50, 210, 90]])     # only the position at 200
+        self.assertFalse(any("gaps_not_interpolated" in r for r in diag["B1"]["rows"]))
+
+    def test_every_slot_names_its_nearest_same_class_element(self) -> None:
+        targets, _ = evidence.find_tier_b(row_of_five(skip=2), damaged([130, 40, 170, 100]),
+                                          bcfg(symmetry_enabled=False))
+        near = targets[0]["nearest_same_class"]
+        self.assertIn(near["element_id"], ("arch_1", "arch_3"))
+        self.assertEqual((near["centre_distance_px"], near["box_gap_px"], near["overlap_share_of_slot"]),
+                         (50.0, 30, 0.0))
+
     def test_row_too_short(self) -> None:
         elements = [el("arch_0", "arch", 50, 70), el("arch_2", "arch", 150, 70)]
         damage = damaged([80, 40, 120, 100])

@@ -158,7 +158,9 @@ class RenderTest(unittest.TestCase):
             self.assertTrue(run.path(name).is_file(), name)
         prov = read_json(run.path("provenance.json"))
         by_id = {e["target_id"]: e for e in prov["targets"]}
-        self.assertEqual(by_id["t_002"]["views"], {"restoration": "not_completed", "first_construction": "completed"})
+        self.assertEqual(by_id["t_002"]["views"], {"restoration": "not_completed",
+                                                   "first_construction": "guess_needs_expert"})
+        self.assertGreater(prov["views"]["first_construction"]["markings_px"]["donor_guess_px"], 0)
         self.assertEqual(by_id["t_003"]["views"], {"restoration": "not_completed",
                                                    "first_construction": "not_completed"})
         self.assertEqual(prov["views"]["first_construction"]["markings_px"]["generative_px"], 0)

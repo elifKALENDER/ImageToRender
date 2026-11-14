@@ -275,6 +275,9 @@ first_construction:
   # first-construction image; conditioning (depth, lineart) is computed from that image. Only pixels of
   # that open area are replaced. Never runs for the restoration view. Off unless RND-003 judges it usable.
   generative: false
+  # Tier B targets come from a pattern, not from a fragment: in this view they are painted as a guess
+  # for the expert (striped, status guess_needs_expert), never as a plain completion (T29).
+  tier_b_is_guess: true
   # How generated pixels are shown when the pass ran (T26, docs/FAILURE_ANALYSIS.md §10). They are never
   # outlined or tone-shifted like donor pixels.
   #   separate: first_construction.png holds no generated pixel (open areas stay hatched, the image is the

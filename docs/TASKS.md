@@ -15,9 +15,9 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: T26 and T28 are done (2026-11-14). T27: the mechanism is done, but point 5 of the failure
-  analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`). The
-  next task is T29** (Phase 3, fixes from `docs/FAILURE_ANALYSIS.md`); T29 and T30 are not started. Author decision
+- **After v0.1.0: T26, T28 and T29 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
+  failure analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`).
+  The next task is T30** (Phase 3, fixes from `docs/FAILURE_ANALYSIS.md`), not started. Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
   skipped. Everything is developed, tuned and reported on s01 (n = 1 building). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
@@ -532,7 +532,7 @@ run the demo on s01. Fix anything missing. Merge to `main` and tag `v0.1.0`.
 
 ## Phase 3 — Fixes from the failure analysis (after v0.1.0)
 
-*Status: T26 and T28 done; T27 mechanism done, one acceptance item open (author); T29 and T30 not started. Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
+*Status: T26, T28, T29 done; T27 mechanism done, one acceptance item open (author); T30 not started. Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
 visual review of the s01 first-construction output with the generative fill on. Order set by the author:
 T26 (legend and labels), T27 (mask reaching the ground), T28 (alignment acceptance), T29 (slot rule), T30
 (logging). Section numbers such as "§8.3" in these five tasks refer to `docs/FAILURE_ANALYSIS.md`.
@@ -642,6 +642,26 @@ px (must be flagged) and a correct one (must pass).
 **Size.** M to L.
 
 ### T29. Slot rule beside a surviving fragment (d)
+*Status: done 2026-11-14, with one part left out. The rule chosen is neither of the two proposals below:
+measured on s01, the extended-box test still left `t_012` free (26 % overlap against the 0.30 limit), and a
+centre-distance limit would have needed a new threshold fitted to two cases. Instead `tier_b1_rows` looks
+at same-class elements that stand between two row neighbours without being row members
+(`gap_intruders`): one that sits on an implied position (within `row_tolerance`) takes that slot; one
+that does not means equal spacing does not hold in that gap, and the gap is not interpolated. No new
+setting. The reason goes to `evidence.json` (`tier_b_diagnostics.B1.rows[].gaps_not_interpolated`) and
+the log; every tier B target has `nearest_same_class` (element, centre distance, box gap, overlap).
+Tier B targets are painted in the first-construction view as guesses (`first_construction.tier_b_is_guess`,
+status `guess_needs_expert`, same orange marking as T28); `restoration.include_tier_b` is unchanged.
+Result on s01 (n = 1, run `20261114_144206`): `recovered_pilaster_046` stands at 1.68 spacings in the gap
+between `recovered_pilaster_022` and `pilaster_011`, so that gap gives no slot: `t_012` **and** `t_013`
+are no longer produced (0 tier B targets, 21 targets: 5 A, 16 C). The first-construction view now changes
+4,971 px (1 accepted target, 4 tier A guesses) and differs from the restoration view only by those
+guesses. Synthetic test (28 cases, `eval_20261114_144239`): full recovery 1 of 12 as before (the cornice,
+by B2), background 4 of 4 left C (`background__bg01` is no longer tier B), partial unchanged, preservation
+0. **Left out:** the second chance for `recovered_pilaster_046`-like fragments as tier A. A width-only
+size filter alone would squeeze a full-height donor into the half-height box; doing it properly means
+extending the target box to the row's height, a further rule, and the author asked to keep the structure
+simple. Open as R-029a; until then such a fragment stays tier C ("no usable donor ... size"). 154 tests.*
 **What.** `evidence.slot_is_free` should not call a slot free when a same-class fragment stands beside
 it. Proposal: test against the fragment's box extended along the element's long axis to the row's height
 (the fragment box covers only the standing part), or require a minimum centre distance as a share of the

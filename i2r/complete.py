@@ -217,11 +217,15 @@ def seam_agreement(image: np.ndarray, mask: np.ndarray, photo: np.ndarray, damag
     return round(ncc(grey(image)[band], grey(photo)[band]), 4), n
 
 
-def judge(alignment: dict, seam: float | None, tier: str, ccfg: dict) -> list[str]:
-    """Reasons why a placed donor is only a guess (empty list = accepted). Tier A only: tier B has no
-    fragment to be judged against. Each test is off while its setting is null or false."""
+TIER_B_GUESS_REASON = "tier B: position implied by a pattern, no fragment in the photograph"
+
+
+def judge(alignment: dict, seam: float | None, tier: str, ccfg: dict, tier_b_is_guess: bool = False) -> list[str]:
+    """Reasons why a placed donor is only a guess (empty list = accepted). The alignment tests apply to
+    tier A only: tier B has no fragment to be judged against, and is a guess as a whole when
+    ``tier_b_is_guess`` (T29). Each test is off while its setting is null or false."""
     if tier != "A":
-        return []
+        return [TIER_B_GUESS_REASON] if tier == "B" and tier_b_is_guess else []
     reasons = []
     low = ccfg["min_alignment_score"]
     if low is not None:
@@ -261,7 +265,7 @@ def paint(out: np.ndarray, labels: np.ndarray, window: list[int], image: np.ndar
 
 def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.ndarray,
              record: dict, donor_mask: np.ndarray, label: int, ccfg: dict,
-             paint_guess: bool = True) -> dict[str, Any]:
+             paint_guess: bool = True, tier_b_is_guess: bool = False) -> dict[str, Any]:
     """Transfer one donor into one target. ``rgb`` is the untouched photograph (alignment and colour
     are measured on it); ``out`` and ``labels`` are written. A placement judged a guess (``judge``) is
     painted only when ``paint_guess``; the measurements are returned either way."""
@@ -286,7 +290,7 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
     fill = mask & damage_w
     seam, seam_px = seam_agreement(image, mask, rgb[wy1:wy2, wx1:wx2], damage_w, fill,
                                    int(ccfg["seam_band_px"]), int(ccfg["seam_min_px"]))
-    reasons = judge(alignment, seam, record["tier"], ccfg)
+    reasons = judge(alignment, seam, record["tier"], ccfg, tier_b_is_guess)
     is_painted = not reasons or paint_guess
     painted = 0
     if is_painted:
@@ -516,7 +520,9 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
             label = len(label_names) + 1
             label_names[str(label)] = record["target_id"]
             info = transfer(out, labels, rgb, damage, record, donor_masks[record["donor_id"]], label, ccfg,
-                            paint_guess=GUESS_IS_PAINTED[view])
+                            paint_guess=GUESS_IS_PAINTED[view],
+                            # only where a guess is painted: restoration.include_tier_b stays a plain switch
+                            tier_b_is_guess=GUESS_IS_PAINTED[view] and bool(config["first_construction"]["tier_b_is_guess"]))
             accepted, is_painted = info["acceptance"]["accepted"], info["acceptance"]["painted"]
             if not is_painted:
                 del label_names[str(label)]            # nothing carries this label; the number is reused

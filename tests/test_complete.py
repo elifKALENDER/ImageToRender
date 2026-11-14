@@ -117,7 +117,16 @@ class FirstConstructionTest(unittest.TestCase):
         records = [record("A"), record("B", "t_002"), record("C", "t_003", donor=None, confidence=0.0)]
         _, _, report = complete.complete_view("first_construction", rgb, damage, records, {"donor": mask}, config())
         status = {e["tier"]: e["status"] for e in report["targets"]}
-        self.assertEqual(status, {"A": "completed", "B": "completed", "C": "not_completed"})
+        # tier B is painted, but as a guess for the expert (T29), never as a plain completion
+        self.assertEqual(status, {"A": "completed", "B": complete.GUESS, "C": "not_completed"})
+        b = next(e for e in report["targets"] if e["tier"] == "B")
+        self.assertEqual(b["acceptance"], {"accepted": False, "reasons": [complete.TIER_B_GUESS_REASON],
+                                           "painted": True})
+        self.assertGreater(b["pixels_changed"], 0)
+        plain = config()
+        plain["first_construction"]["tier_b_is_guess"] = False
+        _, _, report = complete.complete_view("first_construction", rgb, damage, records, {"donor": mask}, plain)
+        self.assertEqual(next(e for e in report["targets"] if e["tier"] == "B")["status"], "completed")
         self.assertIn("generative fill off", report["targets"][2]["rule_reason"])
 
     def test_views_differ_only_inside_tier_b_targets(self) -> None:

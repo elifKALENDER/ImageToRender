@@ -86,11 +86,13 @@ same class at box IoU >= 0.5.
 | Plain wall | 4 | C | 3 left C; the restoration view left all 4 open |
 | Pixels changed outside the damage mask | 28 | 0 | 0 |
 
-Real damage of s01: 23 targets (5 A, 2 B, 16 C, of which 3 are damage outside the facade limit). Since
-the acceptance tests of T28 (`docs/rnd/RND-004-alignment-acceptance.md`) only 1 of the 5 tier A placements
-is accepted; the other 4 are guesses for the expert. The restoration view completes 1 target (648 px;
-5 targets and 4,971 px before those tests); the first-construction view 3, plus the 4 guesses marked as
-such (11,367 px in all); 79.5 % of the damaged pixels have no evidence and stay open.
+Real damage of s01: 21 targets (5 A, 0 B, 16 C, of which 3 are damage outside the facade limit). The two
+tier B slots of v0.1.0 are no longer produced: a surviving pilaster fragment stands in that gap off the
+implied positions (T29). Since the acceptance tests of T28 (`docs/rnd/RND-004-alignment-acceptance.md`)
+only 1 of the 5 tier A placements is accepted; the other 4 are guesses for the expert. The restoration
+view completes 1 target (648 px; 5 targets and 4,971 px in v0.1.0); the first-construction view shows the
+same target plus the 4 guesses, marked as such (4,971 px in all; 11,367 px in v0.1.0); 79.5 % of the
+damaged pixels have no evidence and stay open.
 Of the 10 reconstruction hypotheses an expert approved in an earlier rule-based experiment on the same
 photograph, the pipeline finds 4.
 

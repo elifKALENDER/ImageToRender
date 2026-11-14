@@ -389,10 +389,46 @@ def row_spacing(row: list[dict], tol: float) -> tuple[float, list[float]] | None
     return unit, gaps
 
 
+def gap_intruders(left: dict, right: dict, row: list[dict], active: list[dict]) -> list[dict]:
+    """Same-class elements that are not row members but stand between two row neighbours, at the row's
+    height. Typically a fragment whose box covers only its standing part, so it joined no row."""
+    members = {e["id"] for e in row}
+    lx, rx = box_centre(left["box"])[0], box_centre(right["box"])[0]
+    top = min(left["box"][1], right["box"][1])
+    bottom = max(left["box"][3], right["box"][3])
+    found = []
+    for e in active:
+        if e["class"] != left["class"] or e["id"] in members:
+            continue
+        cx = box_centre(e["box"])[0]
+        if lx < cx < rx and min(bottom, e["box"][3]) > max(top, e["box"][1]):
+            found.append(e)
+    return found
+
+
+def nearest_same_class(box: list[int], element_class: str, active: list[dict]) -> dict | None:
+    """The same-class element whose centre is horizontally nearest to ``box``, with the distances
+    (logged for every implied slot, T29)."""
+    cx = box_centre(box)[0]
+    same = [e for e in active if e["class"] == element_class]
+    if not same:
+        return None
+    e = min(same, key=lambda e: abs(box_centre(e["box"])[0] - cx))
+    return {"element_id": e["id"], "damage_status": e.get("damage_status"),
+            "centre_distance_px": round(abs(box_centre(e["box"])[0] - cx), 1),
+            "box_gap_px": int(max(e["box"][0] - box[2], box[0] - e["box"][2])),     # negative = the boxes overlap
+            "overlap_share_of_slot": round(intersection(box, e["box"]) / ((box[2] - box[0]) * (box[3] - box[1])), 3)}
+
+
 def tier_b1_rows(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[list[dict], dict]:
     """B1: a gap between two observed same-class neighbours, about k whole spacings wide (k >= 2),
     whose implied slots lie in the damage mask with no element. Only between neighbours, never beyond
-    a row's end."""
+    a row's end.
+
+    A same-class element standing inside the gap without being a row member (T29) either sits on one of
+    the k - 1 implied positions (within ``row_tolerance`` of the spacing), and then takes that slot, or it
+    does not, and then the gap is not interpolated at all: the observation contradicts equal spacing
+    there."""
     tol = float(bcfg["row_tolerance"])
     height, width = damage.shape
     active = active_elements(elements)
@@ -421,7 +457,23 @@ def tier_b1_rows(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[
             (lx, ly), (rx, ry) = box_centre(left["box"]), box_centre(right["box"])
             w = (box_size(left["box"])[0] + box_size(right["box"])[0]) / 2
             h = (box_size(left["box"])[1] + box_size(right["box"])[1]) / 2
+            taken, off_grid = set(), None
+            for e in gap_intruders(left, right, row, active):
+                position = (box_centre(e["box"])[0] - lx) / (rx - lx) * k
+                if abs(position - round(position)) > tol:
+                    off_grid = (e, position)
+                    break
+                taken.add(int(round(position)))
+            if off_grid is not None:
+                info.setdefault("gaps_not_interpolated", []).append({
+                    "between": [left["id"], right["id"]], "slots_implied": k - 1,
+                    "element_id": off_grid[0]["id"], "position_in_spacings": round(off_grid[1], 2),
+                    "reason": (f"{off_grid[0]['id']} stands in this gap at {off_grid[1]:.2f} spacings, not on an "
+                               f"implied position (tolerance {tol:.2f}); equal spacing does not hold here")})
+                continue
             for j in range(1, k):
+                if j in taken:
+                    continue
                 cx, cy = lx + (rx - lx) * j / k, ly + (ry - ly) * j / k
                 slot = box_from_centre(cx, cy, w, h, width, height, float(bcfg["slot_min_inside_image"]))
                 if slot is None:
@@ -560,6 +612,9 @@ def find_tier_b(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[l
         else:
             twin.setdefault("also_implied_by", []).append({"rule": t["rule"], "donor_id": t["donor_id"],
                                                           "confidence": t["confidence"]})
+    active = active_elements(elements)
+    for t in kept:
+        t["nearest_same_class"] = nearest_same_class(t["target_box"], t["class"], active)
     return kept, diagnostics
 
 
@@ -874,8 +929,10 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         elif r["kind"] == "fragmented_element":
             log.info("[evidence]   %s %-24s C  %s", r["target_id"], r["element_id"], r["reason"])
         elif r["kind"] == "implied_slot":
-            log.info("[evidence]   %s %-24s %s donor %s conf %.3f box %s", r["target_id"], r["class"] + " slot",
-                     r["rule"], r["donor_id"], r["confidence"], r["target_box"])
+            near = r.get("nearest_same_class") or {}
+            log.info("[evidence]   %s %-24s %s donor %s conf %.3f box %s | nearest %s at %s px", r["target_id"],
+                     r["class"] + " slot", r["rule"], r["donor_id"], r["confidence"], r["target_box"],
+                     near.get("element_id"), near.get("centre_distance_px"))
     for name, diag in b_diag.items():
         if "axis" in diag:
             axis = diag["axis"]
@@ -885,6 +942,10 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         elif "rows" in diag:
             usable = [r for r in diag["rows"] if "skipped" not in r]
             log.info("[evidence] B1: %d row(s), %d with at least min_row_size elements", len(diag["rows"]), len(usable))
+            for row in diag["rows"]:
+                for gap in row.get("gaps_not_interpolated", []):
+                    log.info("[evidence] B1: gap %s not interpolated (%d slot(s) withheld): %s",
+                             gap["between"], gap["slots_implied"], gap["reason"])
         elif not diag.get("enabled", True):
             log.info("[evidence] %s off: %s", name, diag["reason"])
     log.info("[evidence] tier C: %d region(s), %.1f %% of the damage pixels", len(c_records),
