@@ -37,7 +37,7 @@ from PIL import Image
 
 from i2r.detect import class_color, load_elements
 from i2r.runio import ContractError, read_json, write_json
-from i2r.complete import GENERATIVE_LABEL_NAME, GUESS, OUTSIDE_FACADE, load_facade_mask
+from i2r.complete import GENERATIVE_LABEL_NAME, GUESS, OUTSIDE_FACADE, REJECTED, load_facade_mask
 
 if TYPE_CHECKING:
     import argparse
@@ -366,7 +366,7 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
                 for view, rep in completion["views"].items()}
     entries = []
     for r in records:
-        views, reasons, pixels, alignment, acceptance = {}, {}, {}, {}, {}
+        views, reasons, pixels, alignment, acceptance, placement = {}, {}, {}, {}, {}, {}
         method = "none"
         for view, by_id in per_view.items():
             if not by_id:
@@ -375,16 +375,18 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
             e = by_id.get(r["target_id"])
             if e is None:
                 raise ContractError(f"completion.json view {view}: no entry for target {r['target_id']}")
-            views[view] = e["status"] if e["status"] in ("completed", GUESS) else "not_completed"
+            views[view] = e["status"] if e["status"] in ("completed", GUESS, REJECTED) else "not_completed"
             reasons[view] = e.get("note") or e["rule_reason"]
             pixels[view] = e["pixels_changed"]
             if e.get("method") == "donor_transfer":
                 method = e["method"]
-            if "alignment" in e and e["status"] in ("completed", GUESS):
+            if "alignment" in e and e["status"] in ("completed", GUESS, REJECTED):
                 alignment[view] = {**{k: e["alignment"].get(k) for k in ("dx", "dy", "scale", "score_before", "score",
                                                                         "on_bound", "limits")},
                                    "seam_agreement": e.get("seam_agreement")}
                 acceptance[view] = e.get("acceptance")
+                placement[view] = {"placement_box": e.get("placement_box"), "donor_px": e.get("donor_px"),
+                                   "panel": e.get("panel_file")}
         entries.append({
             "target_id": r["target_id"],
             "kind": r["kind"],
@@ -407,6 +409,7 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
             "pixels_changed": pixels,
             "alignment": alignment,
             "acceptance": acceptance,
+            "placement": placement,
         })
     return entries
 
@@ -511,7 +514,7 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         "facade": evidence.get("facade"),
         "method_values": ["donor_transfer", "generative", "none"],
         # completed = accepted donor placement; guess_needs_expert = placed or withheld as a guess (T28).
-        "view_status_values": ["completed", GUESS, "not_completed", "not_rendered"],
+        "view_status_values": ["completed", GUESS, REJECTED, "not_completed", "not_rendered"],
         "targets": entries,
         # One conjecture entry per view that ran the tier C pass: no donor, no evidence (§5.4, §5.6).
         "generative_fill": {v: {"method": "generative", "donor_id": None, "evidence": "conjecture",

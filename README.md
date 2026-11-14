@@ -169,6 +169,7 @@ scaled automatically to the photograph's size (`config.yaml` › `scale`).
 | `restoration.png`, `first_construction.png` | the two views, with markings and legend |
 | `restoration_source_map.png`, `first_construction_source_map.png` | every changed pixel coloured by tier, with its target ID |
 | `first_construction_conjecture_overlay.png` | generative pixels (none while the fill is off); always delivered with the first-construction view |
+| `targets/<target_id>_<view>.png` | per placed donor: photograph, damage mask, donor as placed, result. What the expert looks at in `tools/target_review.py` |
 | `first_construction_ai_guess.png` | only when the generative fill ran (off by default): the view with the generated pixels, striped and under an "AI guess" banner. `first_construction.png` itself then holds no generated pixel (`first_construction.generative_display: separate`) |
 | `provenance.json` | one entry per target: tier, donor, similarity, confidence, alternatives, method, pixels per view |
 | `evidence_overlay.png`, `evidence_sheet.png` | donor -> target arrows; per target the fragment beside the chosen donor and alternatives |

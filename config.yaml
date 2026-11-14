@@ -20,6 +20,7 @@ scale:
     - damage.cut_margin_px
     - complete.feather_px
     - complete.seam_band_px
+    - complete.crop_context_px
     - restoration.outline_px
     - restoration.hatch_spacing_px
     - restoration.hatch_width_px
@@ -238,6 +239,10 @@ complete:
   # All 9 synthetic cases end on a search bound, the four good ones too, so a bound cannot fail a
   # placement by itself. It is recorded for every target (alignment.on_bound, alignment.limits).
   guess_when_on_bound: false
+  # Per-target comparison images targets/<target_id>_<view>.png (T30): the crop is the search window plus
+  # this margin, shown at this height. Display only.
+  crop_context_px: 12
+  crop_panel_height_px: 300
 
 restoration:
   include_tier_b: false             # Venice Charter: stop where conjecture begins (§5.3, D4)

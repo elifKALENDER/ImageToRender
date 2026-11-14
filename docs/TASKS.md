@@ -15,9 +15,9 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: T26, T28 and T29 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
+- **After v0.1.0: T26 and T28 to T31 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
   failure analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`).
-  The next task is T30** (Phase 3, fixes from `docs/FAILURE_ANALYSIS.md`), not started. Author decision
+  Phase 3 has no open coding task; what is open is the author's manual input (see `docs/STATUS.md`).** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
   skipped. Everything is developed, tuned and reported on s01 (n = 1 building). T12 to T18 carry a
   "Status: done" note with decisions and results; T01 to T11 have none because they finished without
@@ -532,7 +532,7 @@ run the demo on s01. Fix anything missing. Merge to `main` and tag `v0.1.0`.
 
 ## Phase 3 — Fixes from the failure analysis (after v0.1.0)
 
-*Status: T26, T28, T29 done; T27 mechanism done, one acceptance item open (author); T30 not started. Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
+*Status: T26, T28, T29, T30 done, T31 added and done; T27 mechanism done, one acceptance item open (author). Source: `docs/FAILURE_ANALYSIS.md` (2026-11-12), the author's
 visual review of the s01 first-construction output with the generative fill on. Order set by the author:
 T26 (legend and labels), T27 (mask reaching the ground), T28 (alignment acceptance), T29 (slot rule), T30
 (logging). Section numbers such as "§8.3" in these five tasks refer to `docs/FAILURE_ANALYSIS.md`.
@@ -675,6 +675,13 @@ recovery not below 1 of 12, `background__bg01` no longer tier B, or the note say
 **Size.** S to M.
 
 ### T30. Remaining logging (e)
+*Status: done 2026-11-14. `completion.json` holds, for every placed donor, `placement_box` (the donor
+box after scale and shift) and `donor_px` (placed, used inside the damage mask, discarded on surviving
+stone, and the two shares); `provenance.json` repeats them under `placement`. `targets/<target_id>_<view>.png`
+has four panels: photograph, damage mask, donor as placed, result. The donor panel is drawn again from
+the recorded placement, so a guess that was withheld is shown too. On s01 (run `20261114_150113`): 10
+panels (5 targets x 2 views); the view images and completed images are byte-identical to the run before
+(`20261114_144206`). The nearest-element distance for slots was done in T29.*
 **What.** The items of §4 not covered by T26 to T29: final placement rectangle, share of the donor used
 and discarded, per-target crops `targets/<target_id>_<view>.png` (photograph, mask, donor as placed,
 result), nearest-element distance for slots if not done in T29.
@@ -682,6 +689,24 @@ result), nearest-element distance for slots if not done in T29.
 **Accept.** For every completed target of the reference run the crop exists and `completion.json` holds
 the rectangle and the two shares; outputs of both views are byte-identical to before (logging only).
 **Size.** S.
+
+### T31. Expert decision per target (added 2026-11-14)
+*Status: done 2026-11-14. Why: T28 made weak placements "guess, needs expert", but there was no place for
+the expert's answer (the review step works on elements, not on targets; `docs/FAILURE_ANALYSIS.md` §6).
+What: `tools/target_review.py --run <run>` shows each placed donor with its panel and figures; Approve,
+Reject or Clear, with a note; `--list`, `--approve`, `--reject`, `--clear` do the same without a window.
+Decisions go to `data/structures/<id>/target_decisions.json` (tracked in git: it holds no image) and are
+applied by the next complete step: approve completes the placement in every view whose rule allows it,
+reject withholds it everywhere (status `rejected_by_expert`). A decision names the placement it was made
+for (donor, flip, scale, shift) and is ignored, and reported as stale, when the placement has changed. The
+automatic verdict stays in the record next to the expert's. Targets are keyed by element, not by target
+ID, because IDs are renumbered when the set of targets changes. No decision has been entered for s01:
+that is the author's. Open: a rejected target's area is hatched as "no evidence", without a marking of
+its own. 163 tests (the window was opened and stepped through by a script, not used by hand).*
+**What.** Tool, decisions file, their use in `complete`, statuses in `provenance.json`.
+**Files.** `tools/target_review.py`, `i2r/complete.py`, `i2r/render.py`, `.gitignore`, `tests/test_target_review.py`.
+**Accept.** An approved guess is completed in the restoration view; a rejected accepted placement is
+withheld in both views; a decision for another placement changes nothing; all three tested.
 
 ---
 

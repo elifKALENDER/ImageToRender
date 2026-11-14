@@ -21,13 +21,25 @@ At the end of every view: no pixel outside the damage mask may differ from the p
 
 Targets are painted in increasing confidence, so where two overlap the more confident one is on top.
 
+Acceptance (T28): a tier A placement that fails ``judge`` is a guess for the expert, withheld in the
+restoration view and painted as a guess in the first-construction view. The expert's own decision per
+target (T31) overrides it: ``target_decisions.json`` in the building's folder, written by
+``tools/target_review.py``. "approve" completes the placement in every view whose rule allows it,
+"reject" withholds it everywhere. A decision names the placement it was made for (donor, flip, scale,
+shift); when the placement has changed since, the decision is ignored and reported as stale.
+
 Output in the run folder, per view <v>:
     <v>_completed.png    the photograph with completed targets (no marking; render.py adds it)
     <v>_source.png       16-bit label image: 0 = photograph, n = n-th entry of "labels"
-    completion.json      per view: rule, per-target status, alignment, pixels changed, labels
+    completion.json      per view: rule, per-target status, alignment, acceptance, placement rectangle,
+                         donor pixel shares, pixels changed, labels
+    targets/<target_id>_<v>.png
+                         per placed donor (T30): photograph | damage mask | donor as placed | result
+    target_decisions.json  copy of the building's expert decisions used by this run, when there are any
 """
 from __future__ import annotations
 
+import shutil
 from typing import TYPE_CHECKING, Any, Callable
 
 import cv2
@@ -44,6 +56,8 @@ if TYPE_CHECKING:
 
 COMPLETION_FILE = "completion.json"
 DAMAGE_MASK = "damage_mask.png"
+DECISIONS_FILE = "target_decisions.json"      # in the building's folder; copied into the run folder
+TARGETS_DIR = "targets"
 
 
 OUTSIDE_FACADE = "outside_facade"    # evidence record kind: damage pixels outside the facade limit (T27)
@@ -93,6 +107,23 @@ VIEW_RULES: dict[str, Callable[[dict, dict], tuple[bool, str]]] = {
 # completion (T28). The restoration view withholds it; the first-construction view paints and marks it.
 GUESS = "guess_needs_expert"
 GUESS_IS_PAINTED = {"restoration": False, "first_construction": True}
+REJECTED = "rejected_by_expert"
+DECISION_VALUES = ("approve", "reject")
+
+
+def decision_key(record: dict) -> str:
+    """Name of a target that stays the same from run to run (target IDs are renumbered when the set of
+    targets changes): the element for a fragment, kind, rule, class and box for anything else."""
+    if record.get("element_id"):
+        return f"element:{record['element_id']}"
+    x1, y1, x2, y2 = record["target_box"]
+    return f"{record['kind']}:{record.get('rule') or '-'}:{record.get('class') or '-'}:{x1},{y1},{x2},{y2}"
+
+
+def placement_signature(record: dict, alignment: dict) -> dict:
+    """What an expert decision is about: this donor, placed this way."""
+    return {"donor_id": record["donor_id"], "flipped": bool(record["flipped"]),
+            "scale": float(alignment["scale"]), "dx": int(alignment["dx"]), "dy": int(alignment["dy"])}
 
 
 # ---------------------------------------------------------------------------
@@ -265,10 +296,12 @@ def paint(out: np.ndarray, labels: np.ndarray, window: list[int], image: np.ndar
 
 def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.ndarray,
              record: dict, donor_mask: np.ndarray, label: int, ccfg: dict,
-             paint_guess: bool = True, tier_b_is_guess: bool = False) -> dict[str, Any]:
+             paint_guess: bool = True, tier_b_is_guess: bool = False,
+             decision: dict | None = None) -> dict[str, Any]:
     """Transfer one donor into one target. ``rgb`` is the untouched photograph (alignment and colour
     are measured on it); ``out`` and ``labels`` are written. A placement judged a guess (``judge``) is
-    painted only when ``paint_guess``; the measurements are returned either way."""
+    painted only when ``paint_guess``; the measurements are returned either way. ``decision`` is the
+    expert's entry for this target, if any: it applies only to the placement it names."""
     target_box = record["target_box"]
     patch, usable = donor_patch(rgb, damage, donor_mask, record["donor_box"], bool(record["flipped"]))
     window = window_for(target_box, ccfg, damage.shape)
@@ -291,18 +324,74 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
     seam, seam_px = seam_agreement(image, mask, rgb[wy1:wy2, wx1:wx2], damage_w, fill,
                                    int(ccfg["seam_band_px"]), int(ccfg["seam_min_px"]))
     reasons = judge(alignment, seam, record["tier"], ccfg, tier_b_is_guess)
-    is_painted = not reasons or paint_guess
+    accepted = not reasons
+    is_painted = accepted or paint_guess
+    acceptance: dict[str, Any] = {}
+    if decision:
+        expert = decision["decision"] if decision.get("placement") == placement_signature(record, alignment) else "stale"
+        acceptance = {"expert": expert, "expert_note": decision.get("note") or ""}
+        if expert == "approve":
+            accepted = is_painted = True
+        elif expert == "reject":
+            accepted = is_painted = False
     painted = 0
     if is_painted:
         alpha = feather_alpha(fill, damage_w, float(ccfg["feather_px"]))
         painted = paint(out, labels, window, image, alpha, label)
     x1, y1, x2, y2 = target_box
     box_damage = int(damage[y1:y2, x1:x2].sum())
+    px, py, pw, ph = placement(target_box, alignment["scale"], alignment["dx"], alignment["dy"])
+    placed, used = int(mask.sum()), int(fill.sum())
     return {"alignment": alignment, "seam_agreement": seam, "seam_px": seam_px,
-            "acceptance": {"accepted": not reasons, "reasons": reasons, "painted": is_painted},
+            "acceptance": {"accepted": accepted, "reasons": reasons, "painted": is_painted, **acceptance},
+            # T30: where the donor box ended up, and how much of the donor the damage mask let through
+            "placement_box": [round(px, 1), round(py, 1), round(px + pw, 1), round(py + ph, 1)],
+            "donor_px": {"placed": placed, "used_in_damage": used, "discarded_on_surviving": placed - used,
+                         "share_used": round(used / placed, 4) if placed else None,
+                         "share_discarded": round((placed - used) / placed, 4) if placed else None},
             "colour_shift": colour_shift, "pixels_painted": painted,
             "damage_px_in_box": box_damage,
             "damage_px_in_box_left_unfilled": int(box_damage - (fill[y1 - wy1:y2 - wy1, x1 - wx1:x2 - wx1]).sum())}
+
+
+def target_panel(rgb: np.ndarray, damage: np.ndarray, result: np.ndarray, record: dict, donor_mask: np.ndarray,
+                 entry: dict, ccfg: dict) -> np.ndarray:
+    """One image per placed donor (T30): photograph | damage mask | donor as placed | result of this view,
+    around the target box. The donor is drawn again from the recorded placement, so the panel also shows
+    a guess that was not painted."""
+    box = record["target_box"]
+    wx1, wy1, wx2, wy2 = window_for(box, ccfg, damage.shape)
+    ctx = int(ccfg["crop_context_px"])
+    height, width = damage.shape
+    crop = [max(0, wx1 - ctx), max(0, wy1 - ctx), min(width, wx2 + ctx), min(height, wy2 + ctx)]
+    cx1, cy1, cx2, cy2 = crop
+    patch, usable = donor_patch(rgb, damage, donor_mask, record["donor_box"], bool(record["flipped"]))
+    al = entry["alignment"]
+    donor, mask = warp(patch, usable, placement(box, al["scale"], al["dx"], al["dy"]), crop)
+    donor = np.clip(donor.astype(np.float32) + np.asarray(entry["colour_shift"], np.float32), 0, 255).astype(np.uint8)
+    photo = rgb[cy1:cy2, cx1:cx2]
+    hole = damage[cy1:cy2, cx1:cx2] > 0
+    tinted = photo.astype(np.float32).copy()
+    tinted[hole] = tinted[hole] * 0.45 + np.array([230, 50, 50], np.float32) * 0.55
+    faded = (photo.astype(np.float32) * 0.35 + 150 * 0.65).astype(np.uint8)
+    faded[mask] = donor[mask]
+    panels = [("photograph", photo), ("damage mask", tinted.astype(np.uint8)), ("donor as placed", faded),
+              (f"result: {entry['status']}", result[cy1:cy2, cx1:cx2])]
+    target_h = int(ccfg["crop_panel_height_px"])
+    factor = target_h / max(1, cy2 - cy1)
+    size = (max(1, int(round((cx2 - cx1) * factor))), target_h)
+    tiles = []
+    for caption, image in panels:
+        tile = cv2.resize(image, size, interpolation=cv2.INTER_CUBIC)
+        x, y = (np.array([box[0] - cx1, box[1] - cy1]) * factor).astype(int)
+        x2, y2 = (np.array([box[2] - cx1, box[3] - cy1]) * factor).astype(int)
+        cv2.rectangle(tile, (int(x), int(y)), (int(x2) - 1, int(y2) - 1), (255, 220, 0), 1)     # the target box
+        band_w = max(size[0], 150)
+        band = np.full((18, band_w, 3), 25, np.uint8)
+        cv2.putText(band, caption[:28], (3, 13), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (235, 235, 235), 1, cv2.LINE_AA)
+        tile = np.pad(tile, ((0, 0), (0, band_w - size[0]), (0, 0)), constant_values=25)
+        tiles += [np.vstack([band, tile]), np.full((target_h + 18, 4, 3), 0, np.uint8)]
+    return np.hstack(tiles[:-1])
 
 
 def assert_preserved(original: np.ndarray, result: np.ndarray, damage: np.ndarray, view: str) -> None:
@@ -495,8 +584,11 @@ def generative_fill(image: np.ndarray, area: np.ndarray, config: dict, log) -> t
 def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[dict],
                   donor_masks: dict[str, np.ndarray], config: dict,
                   generate: Callable[[np.ndarray, np.ndarray, dict], tuple[np.ndarray, dict]] | None = None,
-                  facade: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray, dict]:
+                  facade: np.ndarray | None = None,
+                  decisions: dict[str, dict] | None = None) -> tuple[np.ndarray, np.ndarray, dict]:
     """Apply one view's rule. Returns (completed image, uint16 label image, report).
+
+    ``decisions`` maps ``decision_key(record)`` to the expert's entry for that target (T31).
 
     ``generate(image, open_area, config) -> (image, info)`` is the tier C pass; it runs only for the
     first-construction view when ``first_construction.generative`` is true. Open damage pixels outside
@@ -522,16 +614,26 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
             info = transfer(out, labels, rgb, damage, record, donor_masks[record["donor_id"]], label, ccfg,
                             paint_guess=GUESS_IS_PAINTED[view],
                             # only where a guess is painted: restoration.include_tier_b stays a plain switch
-                            tier_b_is_guess=GUESS_IS_PAINTED[view] and bool(config["first_construction"]["tier_b_is_guess"]))
+                            tier_b_is_guess=GUESS_IS_PAINTED[view] and bool(config["first_construction"]["tier_b_is_guess"]),
+                            decision=(decisions or {}).get(decision_key(record)))
             accepted, is_painted = info["acceptance"]["accepted"], info["acceptance"]["painted"]
+            expert, reasons = info["acceptance"].get("expert"), info["acceptance"]["reasons"]
             if not is_painted:
                 del label_names[str(label)]            # nothing carries this label; the number is reused
-            entry.update({"status": "completed" if accepted else GUESS, "flipped": bool(record["flipped"]),
+            status = REJECTED if expert == "reject" else "completed" if accepted else GUESS
+            entry.update({"status": status, "flipped": bool(record["flipped"]),
                           "method": "donor_transfer" if is_painted else "none",
                           **({"label": label} if is_painted else {"pixels_changed": 0}), **info})
-            if not accepted:
-                entry["note"] = (f"{GUESS}: " + "; ".join(info["acceptance"]["reasons"])
-                                 + ("" if is_painted else "; not completed in this view"))
+            if expert == "reject":
+                entry["note"] = f"{REJECTED}: {info['acceptance']['expert_note'] or 'no note'}"
+            elif expert == "approve":
+                entry["note"] = ("approved by the expert" + (f" although: {'; '.join(reasons)}" if reasons else "")
+                                 + (f" ({info['acceptance']['expert_note']})" if info["acceptance"]["expert_note"] else ""))
+            elif not accepted:
+                entry["note"] = (f"{GUESS}: " + "; ".join(reasons)
+                                 + ("" if is_painted else "; not completed in this view")
+                                 + ("; an expert decision exists for another placement and was ignored"
+                                    if expert == "stale" else ""))
         results.append(entry)
     for entry in results:  # final count after overlaps: pixels whose visible label is this target
         if entry.get("label"):
@@ -564,6 +666,8 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
               "pixels_changed": int((labels > 0).sum()),
               "completed": sum(1 for e in results if e["status"] == "completed"),
               "guesses": sum(1 for e in results if e["status"] == GUESS),
+              "expert_decisions": {v: sum(1 for e in results if (e.get("acceptance") or {}).get("expert") == v)
+                                   for v in (*DECISION_VALUES, "stale")},
               "generative": generative}
     return out, labels, report
 
@@ -602,6 +706,32 @@ def load_facade_mask(run: "Run", evidence: dict, shape: tuple[int, int]) -> np.n
     return mask.astype(np.uint8)
 
 
+def read_decisions(path) -> dict[str, dict]:
+    """The expert decisions in ``path`` ({} when the file does not exist), checked."""
+    if not path.is_file():
+        return {}
+    doc = read_json(path)
+    if not isinstance(doc, dict) or not isinstance(doc.get("decisions"), dict):
+        raise ContractError(f"{path}: expected an object with a 'decisions' object")
+    for key, d in doc["decisions"].items():
+        if not isinstance(d, dict) or d.get("decision") not in DECISION_VALUES or "placement" not in d:
+            raise ContractError(f"{path}: decision {key!r} needs 'decision' ({' or '.join(DECISION_VALUES)}) "
+                                "and 'placement'")
+    return doc["decisions"]
+
+
+def load_decisions(run: "Run") -> dict[str, dict]:
+    """Expert decisions of the building, copied into the run folder so the run stays reproducible."""
+    source = run.structure_dir / DECISIONS_FILE
+    decisions = read_decisions(source)
+    copy = run.path(DECISIONS_FILE)
+    if source.is_file():
+        shutil.copy2(source, copy)
+    elif copy.exists():
+        copy.unlink()                              # copied from the run this one resumes
+    return decisions
+
+
 def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     log = run.logger
     evidence = read_json(run.path("evidence.json"))
@@ -623,6 +753,12 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     size = (rgb.shape[1], rgb.shape[0])
     donor_masks = load_donor_masks(run, elements, records, size)
     facade = load_facade_mask(run, evidence, damage.shape)
+    decisions = load_decisions(run)
+    by_id = {r["target_id"]: r for r in records}
+    targets_dir = run.path(TARGETS_DIR)
+    if targets_dir.exists():
+        shutil.rmtree(targets_dir)                 # copied from the run this one resumes
+    targets_dir.mkdir()
 
     report: dict[str, Any] = {"structure_id": run.structure_id, "views": {}}
     for view in getattr(opts, "views", ["restoration"]):
@@ -634,7 +770,14 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
             return generative_fill(image, area, config, log)
 
         out, labels, view_report = complete_view(view, rgb, damage, records, donor_masks, run.config, generate,
-                                                 facade)
+                                                 facade, decisions)
+        for e in view_report["targets"]:
+            if "alignment" in e:
+                record = by_id[e["target_id"]]
+                e["panel_file"] = f"{TARGETS_DIR}/{e['target_id']}_{view}.png"
+                e["decision_key"] = decision_key(record)
+                Image.fromarray(target_panel(rgb, damage, out, record, donor_masks[record["donor_id"]], e,
+                                             run.config["complete"])).save(run.path(e["panel_file"]))
         gen = view_report.get("generative")
         if gen is not None:
             debug = gen.pop("debug")
@@ -647,8 +790,9 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         report["views"][view] = view_report
         tier_a = sum(1 for r in records if r["tier"] == "A")
         log.info("[complete] %s: %d target(s) completed (tier A records: %d), %d pixel(s) changed; "
-                 "pixels outside the damage mask unchanged (checked)",
-                 view, view_report["completed"], tier_a, view_report["pixels_changed"])
+                 "pixels outside the damage mask unchanged (checked); expert decisions applied: %s",
+                 view, view_report["completed"], tier_a, view_report["pixels_changed"],
+                 view_report["expert_decisions"])
         for e in view_report["targets"]:
             if "alignment" in e:
                 al = e["alignment"]
