@@ -5,7 +5,7 @@ Research/portfolio repo. Input: a photograph of a damaged historical building. O
 support, never a restoration decision. The owner is an architect and writes in Turkish.
 
 ## Read first
-- `docs/TASKS.md`: ordered task list; its "Before you start" section names the next task (none open in Phase 3; see `docs/STATUS.md`).
+- `docs/TASKS.md`: ordered task list; its "Before you start" section names the next task (none open in Phase 3; see `docs/STATUS.md` and "Resume here" below).
 - `docs/STATUS.md`: state after Phase 3 (2026-11-14): problems with causes, and the author's manual steps in order.
 - `docs/FAILURE_ANALYSIS.md`: the author's visual review of the s01 output and the causes found (2026-11-12); source of T26 to T30.
 - `docs/ARCHITECTURE.md`: design (6 modules detect, review, damage, evidence, complete, render; evidence tiers A, B, C).
@@ -43,6 +43,42 @@ support, never a restoration decision. The owner is an architect and writes in T
 - Reference runs: `outputs/s01_test_church/20261110_181914` (SAM-refined inventory, mask v3) and `outputs/s01_test_church/20261110_182638` (both views, latest). Develop from these, not from raw detections (oversized boxes).
 - Re-run: `python run.py --structure s01_test_church --from damage --view both --no-review`.
 
+## Resume here (written 2026-11-15, end of session)
+Branch `fix/failure-analysis`, everything pushed, 187 tests. Start by reading `docs/STATUS.md`, then this list.
+
+**Waiting for the author's answer (asked, not answered):**
+1. s04 mask, the band along the left side of the building (59 % of mask v1 lies outside the building's
+   silhouette; the pipeline hatches it "outside facade" and fills nothing). Either (a) take the band out of
+   the mask, or (b) build a "mass symmetry" step that mirrors the right half of the building about its axis
+   into the band, marked as a large guess. The author argues the building is symmetric; the silhouette's
+   mirror check (axis x = 749) found only a strip at the drum's upper left. Do not decide this for them.
+2. s04: the five placements of run `outputs/s04_ani_redeemer/20261115_132443` are guesses; review with
+   `python tools/target_review.py --run outputs/s04_ani_redeemer/20261115_132443`.
+3. s01: four pilasters (`t_001`, `t_004`, `t_005`, `t_007`) wait for approve / reject, `t_006` for another
+   donor; newest s01 folder `outputs/s01_test_church/20261115_111946` (images identical to `20261114_170229`).
+
+**State of s04 (second building, first run 2026-11-15):** author's mask v1 (13.5 % of the image), the
+assistant's draft inventory (13 boxes, `source: assistant_draft`, lower arcade only; the upper arcade is
+missing), no threshold changed. Result: 16 targets (3 A, 2 B, 11 C), 0 completed, 5 guesses, 33,763 px in the
+first-construction view. The broken arch scores 0.77 (threshold 0.80); B2 fired here (axis agreement 1.00),
+one of its two slots is nonsense (at the left image edge). Run folders `20261115_132404`, `_132421`,
+`_132424` are intermediate (failed attempt, draft inventory, SAM refinement).
+
+**How the author works (learned today):** does not want to paint masks or draw boxes for long; wants these
+steps automatic. The brush controls of `tools/mask_editor.py` were fixed for this. A colour rule gave a
+usable draft mask only round the breach; over the whole photograph it marked shadow and horizon. Make
+drafts, label them as the assistant's, let the author correct.
+
+**Open coding items, none started:** R-004d (donor seen at another angle), R-038a (check or draw a
+reference donor's mask), B3 (paired rhythm), upper arcade of s04 in the inventory, the nonsense B2 slot at
+the image edge (`slot_min_inside_image` lets a 22 px wide slot through).
+
+**Scratch files are gone after the session.** The draft inventory boxes are in
+`outputs/s04_ani_redeemer/20261115_132443/elements.json` (`source: assistant_draft`); the colour rule of
+the draft mask is written out in `data/structures/s04_ani_redeemer/SOURCE.md` history (git) and below:
+HSV S < 55 and V > 115, or V < 38, inside x 850-1230, y 1230-1840, opened 5 px, closed 21 px, components
+of 2,500 px or more.
+
 ## Where we stopped (2026-11-12)
 - T19 done (see its status note in `docs/TASKS.md`): s01 synthetic test, 28 cases, preservation 0; partial 9/12 tier A, full 1/12 (B rules rarely fire), background abstention 4/4 in the restoration view, one B1 false positive in the first-construction view. Evaluation: `outputs/synthetic/s01_test_church/20261112_122615/eval_20261112_122636/completion.md`.
 - Re-run: `python tools/synthetic_damage.py --run <run>` then `python evaluation/evaluate.py completion --cases <cases folder>` (about 3 minutes for 28 cases).
@@ -68,7 +104,7 @@ support, never a restoration decision. The owner is an architect and writes in T
 - T36 (2026-11-15, experiment, negative): `complete.refine_aspects` (separate vertical scale) exists, default `[1.0]` = off; it did not fix `t_002` and would make the expert decisions stale. Measured cause of `t_002`: donor `arch_005` is seen at an angle, its right leg ends 19 px above its box bottom (R-004d open). Trial run `20261115_101920` is not a result. 176 tests.
 - T37 done as a mechanism (2026-11-15, was R5c; the author left the choice to the assistant): reference donors = boxes on another photograph of the building (`tools/reference_donors.py`, `data/structures/<id>/reference_donors.json` tracked, photo in `references/` local; `i2r/references.py`). IDs `ref:<id>`, proportions-only size filter, box as mask, automatic only when no same-photo donor qualifies, always a guess (`complete.reference_donor_is_guess`). The expert can name a donor also for a fragment that got none (becomes tier A by choice). s01 trial with the 567 x 800 web photo and two boxes drawn by the assistant: automatic result unchanged; named by hand the patches are blurred and rectangular (run `20261115_103148`, not a result). Open: R-037a. 186 tests.
 - T38 done (2026-11-15, was R-037a): `tools/reference_donors.py --masks` makes a SAM mask per reference box (`references/masks/`, tied to the box). On the 567 px trial photo the arch mask is the wall field under the arch, not the moulding (wrong object, yet score 0.82 / seam 0.84); masks must be looked at. Trial run `20261115_111849` is not a result. 187 tests.
-- Second building (2026-11-15): `data/structures/s04_ani_redeemer` (Church of the Holy Redeemer, Ani; Wikimedia Commons, CC BY-SA 2.0; crop 1501 x 1956; chosen by the assistant from six photos the author put in `data/incoming/`, see its `SOURCE.md`). Detection only: run `outputs/s04_ani_redeemer/20261115_114047`, 38 raw elements, scores at or below 0.02. Waits for the author's damage mask and inventory. Rule for it: no code, threshold or config change (only the `column: pilaster` merge in its `structure.yaml`); results on it are the first on a second building.
+- Second building (2026-11-15): `data/structures/s04_ani_redeemer` (Church of the Holy Redeemer, Ani; Wikimedia Commons, CC BY-SA 2.0; crop 1501 x 1956; chosen by the assistant from six photos the author put in `data/incoming/`, see its `SOURCE.md`). Detection run `outputs/s04_ani_redeemer/20261115_114047`: 38 raw elements, scores at or below 0.02. First full run the same day with the author's mask v1 and the assistant's draft inventory: `20261115_132443` (see "Resume here"). `i2r/detect.py` accepts `source: assistant_draft`. `tools/mask_editor.py` got a brush slider, + / - keys and a brush outline. Rule for it: no code, threshold or config change (only the `column: pilaster` merge in its `structure.yaml`); results on it are the first on a second building.
 - Current s01 reference: `outputs/s01_test_church/20261114_170229` (fill off, newest folder; open its `report.html`). After entering decisions: `python run.py --structure s01_test_church --from complete --no-review`.
 - Status and open manual work for the author: `docs/STATUS.md`.
 - Known weaknesses (after T20): alignment scale hits the search bounds; low NCC on pilasters; the size filter blocks `recovered_pilaster_046`, `recovered_pilaster_020` and, in the synthetic test, `recovered_arch_025` and `expert_cornice_021`; `min_similarity` cannot be tested without negatives (R-002a); the two B1 slots (x 343-366, 400-423) are doubtful and B1 made a slot on plain wall in `background__bg01`.

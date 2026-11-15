@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| Date | 2026-11-14 |
+| Date | 2026-11-15 |
 | Branch | `fix/failure-analysis`, ahead of `main` (`v0.1.0`); not merged, which is the author's decision |
-| Structures | **n = 1 building with results** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only. `s04_ani_redeemer` (added 2026-11-15) is a **second building** with a known licence (CC BY-SA 2.0), 1501 x 1956: detection only so far, it waits for the author's damage mask and inventory |
+| Structures | **n = 1 building with expert-checked results** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only. `s04_ani_redeemer` (added 2026-11-15) is a **second building** with a known licence (CC BY-SA 2.0), 1501 x 1956: detection only so far, it waits for the author's damage mask and inventory |
 | Reference run | `outputs/s01_test_church/20261114_170229` (generative fill off, the author's decisions applied). Open `report.html` in it |
 | Tests | 187 pass (`python -m unittest discover tests`, no GPU) |
 
@@ -172,11 +172,23 @@ Ordered by how much they limit a presentable result.
   intact bays on both sides. Raw detection (run `outputs/s04_ani_redeemer/20261115_114047`): 38 elements,
   every score at or below 0.02, boxes covering whole wall panels, as on s01 and s03. No code, threshold or
   setting was changed for it except the `column` to `pilaster` merge taken over from s01.
-- **Needs the author.** The damage mask and the inventory of s04:
+- **First run (2026-11-15), run `outputs/s04_ani_redeemer/20261115_132443`.** With the author's mask
+  version 1 (13.5 % of the image; 59 % of it outside the building's silhouette, a band along the left
+  side) and a draft inventory of 13 boxes drawn by the assistant for the lower arcade
+  (`source: assistant_draft`, not an expert inventory). 16 targets: 3 A, 2 B, 11 C. Nothing passes the
+  acceptance tests: 0 completed, 5 guesses, 33,763 px in the first-construction view. The broken arch is
+  completed from its neighbour with alignment score 0.77 (threshold 0.80); the symmetry rule B2 fires
+  (it almost never did on s01) and puts a colonnette at the right edge of the breach, and a nonsense slot
+  at the left image edge. 268,849 mask px lie outside the facade limit and get nothing. With a draft
+  inventory these are a first look, not a result.
+- **Needs the author.** (1) What to do with the band left of the building: remove it from the mask, or
+  ask for a step that mirrors the building's right half into it (a large guess). (2) Review the five
+  placements. (3) An inventory of their own, including the upper arcade.
 
   ```
+  python tools/target_review.py --run outputs/s04_ani_redeemer/20261115_132443
   python tools/mask_editor.py --structure s04_ani_redeemer
-  python tools/editor_adapter.py edit --run outputs/s04_ani_redeemer/20261115_114047
+  python tools/editor_adapter.py edit --run outputs/s04_ani_redeemer/20261115_132443
   ```
 
 ### Smaller points
