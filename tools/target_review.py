@@ -49,9 +49,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from i2r import runio  # noqa: E402
-from i2r.complete import (COMPLETION_FILE, DECISION_VALUES, DECISIONS_FILE, placement_signature,  # noqa: E402
-                          read_decisions, read_donor_choices)
+from i2r import references, runio  # noqa: E402
+from i2r.complete import (COMPLETION_FILE, DECISION_VALUES, DECISIONS_FILE, decision_key,  # noqa: E402
+                          placement_signature, read_decisions, read_donor_choices)
 from i2r.detect import load_elements  # noqa: E402
 from i2r.runio import ContractError, read_json, write_json  # noqa: E402
 
@@ -72,7 +72,7 @@ def donor_options(record: dict, elements: list[dict]) -> list[dict[str, Any]]:
     """Elements the expert can name as donor of a tier A target: the automatic candidates first (by
     similarity, each in its better orientation), then the other same-class elements with the reason
     the automatic filters gave."""
-    if record.get("tier") != "A" or not record.get("element_id"):
+    if record.get("kind") != "fragmented_element" or not record.get("element_id"):
         return []
     by_id = {e["id"]: e for e in elements}
     options, seen = [], set()
@@ -82,28 +82,31 @@ def donor_options(record: dict, elements: list[dict]) -> list[dict[str, Any]]:
         seen.add(c["donor_id"])
         options.append({"donor_id": c["donor_id"], "flipped": bool(c["flipped"]),
                         "similarity": c["scores"].get("dinov2_cosine"), "left_out": None,
-                        "damage_status": by_id[c["donor_id"]].get("damage_status"), "box": by_id[c["donor_id"]]["box"]})
+                        "damage_status": by_id[c["donor_id"]].get("damage_status"), "box": by_id[c["donor_id"]]["box"],
+                        "photo": by_id[c["donor_id"]].get("reference_photo")})
     reasons = {r["donor_id"]: r["reason"] for r in record.get("rejected_donors", [])}
     for e in elements:
         if e["id"] in seen or e["id"] == record["element_id"] or e["class"] != record["class"] or e.get("rejected"):
             continue
         options.append({"donor_id": e["id"], "flipped": False, "similarity": None,
                         "left_out": reasons.get(e["id"], "not compared"),
-                        "damage_status": e.get("damage_status"), "box": e["box"]})
+                        "damage_status": e.get("damage_status"), "box": e["box"],
+                        "photo": e.get("reference_photo")})
     return options
 
 
 def option_text(option: dict[str, Any]) -> str:
     sim = "sim  -  " if option["similarity"] is None else f"sim {option['similarity']:.2f}"
     return (f"{option['donor_id']:26s} {sim}  {'flipped' if option['flipped'] else '       '}  "
-            f"{option['damage_status'] or '?'}" + (f"  (left out: {option['left_out']})" if option["left_out"] else ""))
+            f"{option['damage_status'] or '?'}" + (f"  [photo: {option['photo']}]" if option.get("photo") else "")
+            + (f"  (left out: {option['left_out']})" if option["left_out"] else ""))
 
 
 def review_items(run_dir: Path) -> list[dict[str, Any]]:
     """One item per target that has a placed donor in this run, in target order."""
     completion = read_json(run_dir / COMPLETION_FILE)
     records = {r["target_id"]: r for r in read_json(run_dir / "evidence.json")["targets"]}
-    elements = load_elements(run_dir)["elements"]
+    elements = load_elements(run_dir)["elements"] + references.load_from_run(run_dir)[0]
     items: dict[str, dict[str, Any]] = {}
     for view in VIEW_ORDER:
         for e in completion.get("views", {}).get(view, {}).get("targets", []):
@@ -122,6 +125,13 @@ def review_items(run_dir: Path) -> list[dict[str, Any]]:
                 "options": donor_options(records.get(e["target_id"], {}), elements),
             })
             item["status"][view] = e["status"]
+    # fragments that got no donor: nothing to approve, but the expert can name a donor for them (T37)
+    for target_id, r in records.items():
+        if target_id not in items and r["kind"] == "fragmented_element":
+            items[target_id] = {"target_id": target_id, "key": decision_key(r), "tier": r["tier"], "donor_id": None,
+                                "placement": None, "score": None, "seam": None, "on_bound": [], "reasons": [],
+                                "panel": None, "status": {}, "chosen": None, "why_open": r.get("reason"),
+                                "options": donor_options(r, elements)}
     return sorted(items.values(), key=lambda i: i["target_id"])
 
 
@@ -149,6 +159,9 @@ def set_decision(structure_dir: Path, item: dict[str, Any], decision: str | None
     """Write (or with ``decision`` None remove) the decision for ``item`` in the building's file."""
     if decision is not None and decision not in DECISION_VALUES:
         raise ContractError(f"decision must be one of {', '.join(DECISION_VALUES)}, not {decision!r}")
+    if decision is not None and item["placement"] is None:
+        raise ContractError(f"{item['target_id']}: no donor is placed, so there is nothing to {decision}; "
+                            "name a donor first (--donor) and run the complete step")
     path = decisions_path(structure_dir)
     decisions = read_decisions(path)
     if decision is None:
@@ -187,6 +200,9 @@ def donor_state(donors: dict[str, dict], item: dict[str, Any]) -> str:
     """What the file says about the donor of ``item``, against what this run placed."""
     want = donors.get(item["key"])
     placed = item["placement"]
+    if placed is None:
+        return (f"expert chose {want['donor_id']}{' (flipped)' if want['flipped'] else ''}: "
+                "not placed yet, run the complete step") if want else ""
     if want is None:
         return "chosen by the expert in this run, choice removed since: run the complete step" if item["chosen"] else ""
     if (want["donor_id"], want["flipped"]) == (placed["donor_id"], placed["flipped"]) and item["chosen"]:
@@ -197,7 +213,7 @@ def donor_state(donors: dict[str, dict], item: dict[str, Any]) -> str:
 
 def current(decisions: dict[str, dict], item: dict[str, Any]) -> str:
     d = decisions.get(item["key"])
-    if d is None:
+    if d is None or item["placement"] is None:
         return "-"
     return d["decision"] if d["placement"] == item["placement"] else f"{d['decision']} (stale: placement changed)"
 
@@ -208,6 +224,12 @@ def describe(item: dict[str, Any], decisions: dict[str, dict], donors: dict[str,
 
     status = ", ".join(f"{v}: {s}" for v, s in item["status"].items())
     p = item["placement"]
+    if p is None:
+        lines = [f"{item['target_id']}  tier {item['tier']}  {item['key']}",
+                 f"no donor placed: {item.get('why_open') or '-'}",
+                 "a donor can be named in the donor row" if item["options"] else "no element of this class to name"]
+        state = donor_state(donors or {}, item)
+        return "\n".join(lines + ([f"donor: {state}"] if state else []))
     lines = [
         f"{item['target_id']}  tier {item['tier']}  {item['key']}",
         f"donor {p['donor_id']}{' (flipped)' if p['flipped'] else ''}, scale {p['scale']:.2f}, "
@@ -227,6 +249,11 @@ def describe(item: dict[str, Any], decisions: dict[str, dict], donors: dict[str,
 def table(items: list[dict[str, Any]], decisions: dict[str, dict], donors: dict[str, dict] | None = None) -> str:
     rows = ["target  tier  donor                      score  seam   automatic            expert"]
     for i in items:
+        if i["placement"] is None:
+            rows.append(f"{i['target_id']:7s} {i['tier']:5s} {'-':26s} {'-':6s} {'-':6s} {'no donor placed':20s} -")
+            state = donor_state(donors or {}, i)
+            rows.append(f"        {'donor: ' + state if state else 'why: ' + str(i.get('why_open'))}")
+            continue
         auto = i["status"].get("restoration") or next(iter(i["status"].values()))
         score = "-" if i["score"] is None else f"{i['score']:.2f}"
         seam = "-" if i["seam"] is None else f"{i['seam']:.2f}"
@@ -281,7 +308,10 @@ def window(run_dir: Path, structure_dir: Path, items: list[dict[str, Any]]) -> N
             donor_picture.config(image="")
             return
         option = options[index]
-        crop = source.crop(tuple(option["box"]))
+        photo = source
+        if option.get("photo"):                               # a reference donor: crop its own photograph
+            photo = Image.open(run_dir / references.RUN_DIR / f"{option['photo']}.png").convert("RGB")
+        crop = photo.crop(tuple(option["box"]))
         if option["flipped"]:
             crop = crop.transpose(Image.FLIP_LEFT_RIGHT)
         scale = min(DONOR_PREVIEW_PX / crop.height, DONOR_PREVIEW_PX * 2 / crop.width)
@@ -306,7 +336,7 @@ def window(run_dir: Path, structure_dir: Path, items: list[dict[str, Any]]) -> N
         donors = read_donor_choices(decisions_path(structure_dir))
         head.config(text=f"[{state['index'] + 1} / {len(items)}]  " + describe(item, decisions, donors))
         donor_box.config(values=[option_text(o) for o in item["options"]])
-        wanted = (donors.get(item["key"]) or {}).get("donor_id", item["placement"]["donor_id"])
+        wanted = (donors.get(item["key"]) or {}).get("donor_id", (item["placement"] or {}).get("donor_id"))
         ids = [o["donor_id"] for o in item["options"]]
         if wanted in ids:
             donor_box.current(ids.index(wanted))
@@ -383,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
             + [(t, None) for t in opts.clear]
         for target, decision in changes:
             if target not in by_id:
-                raise ContractError(f"{target}: no placed donor with this ID in the run. Known: {', '.join(by_id)}")
+                raise ContractError(f"{target}: no such target in the run. Known: {', '.join(by_id)}")
             set_decision(structure_dir, by_id[target], decision, opts.note, run_dir)
         donor_changes = ([(opts.donor[0], opts.donor[1])] if opts.donor else []) + [(t, None) for t in opts.auto_donor]
         for target, donor_id in donor_changes + ([(opts.options, None)] if opts.options else []):

@@ -1,0 +1,37 @@
+{
+  "structure_id": "s01_test_church",
+  "about": "Intact elements boxed on other photographs of the same building, offered as donors (tools/reference_donors.py, i2r/references.py). Boxes are in pixels of the named photo.",
+  "photos": {
+    "other_view": {
+      "file": "references/other_view.png",
+      "original_name": "470553649_533637929672305_3536149461209620897_n.jpg",
+      "note": "web photo, source and licence unknown; local only"
+    }
+  },
+  "donors": [
+    {
+      "id": "base_01",
+      "class": "base",
+      "photo": "other_view",
+      "box": [
+        372,
+        588,
+        468,
+        650
+      ],
+      "note": "trial box drawn by the assistant from a gridded crop, not by the expert; redraw or remove"
+    },
+    {
+      "id": "arch_01",
+      "class": "arch",
+      "photo": "other_view",
+      "box": [
+        226,
+        405,
+        292,
+        452
+      ],
+      "note": "trial box drawn by the assistant from a gridded crop, not by the expert; redraw or remove"
+    }
+  ]
+}

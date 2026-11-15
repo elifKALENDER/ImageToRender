@@ -14,7 +14,7 @@
 | Branch | `fix/failure-analysis`, ahead of `main` (`v0.1.0`); not merged, which is the author's decision |
 | Structures | **n = 1 building** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only so far |
 | Reference run | `outputs/s01_test_church/20261114_170229` (generative fill off, the author's decisions applied). Open `report.html` in it |
-| Tests | 176 pass (`python -m unittest discover tests`, no GPU) |
+| Tests | 186 pass (`python -m unittest discover tests`, no GPU) |
 
 Statements marked **(guess)** are the assistant's reading, not a measurement.
 
@@ -41,6 +41,7 @@ Three things can be entered by hand, each with a tool:
 | damage mask, facade mask | `tools/mask_editor.py` | `data/structures/<id>/damage_mask.png`, `facade_mask.png` |
 | element inventory | `tools/editor_adapter.py edit` | the run's `elements.json` |
 | approve / reject a placed donor, name another donor | `tools/target_review.py` | `data/structures/<id>/target_decisions.json` |
+| intact elements on another photograph, as donors | `tools/reference_donors.py` | `data/structures/<id>/reference_donors.json`, `references/` |
 
 ## 2. Result on s01 today
 
@@ -74,8 +75,13 @@ Ordered by how much they limit a presentable result.
   intact base exists on this side.
 - **What would change it.** Another source: an archive photograph, a survey, or the other side of the
   building (`470553649_...n.jpg` in `data/structures/s01_new_photos/` shows intact pilasters with bases).
-  Using a donor from another photograph is not implemented (R5c in `docs/TASKS.md`).
-- **Needs the author.** A decision on whether such a cross-photograph donor is worth building.
+  A donor from another photograph is now possible (T37): boxes drawn on it with
+  `tools/reference_donors.py` become donors, always placed as a guess. The trial with that photograph
+  (567 x 800, half the resolution of s01; boxes by the assistant) gave blurred, rectangular patches and
+  alignment scores of 0.21 to 0.24 for the bases: the mechanism works, the result does not convince.
+- **Needs the author.** A larger photograph of an intact part of the building (own photograph, archive,
+  survey), and the boxes on it. The two trial boxes in `reference_donors.json` are the assistant's:
+  redraw or remove them.
 
 ### P2. The automatic acceptance tests do not agree with the expert
 - **What.** Of the first five placements the tests passed only `t_002`, which the expert rejected; the
@@ -213,6 +219,15 @@ python run.py --structure s01_test_church --from damage --no-review
 After a change of the inventory or the mask, placements may change and earlier decisions of step 1 are
 then reported as stale: review those targets again.
 
+**Step 3b — reference donors (optional).** Box intact elements on another photograph of the building,
+then name them for a target in the review window (they are also taken automatically when similar enough).
+
+```
+python tools/reference_donors.py --structure s01_test_church --name <short name> --photo <image file>
+python run.py --structure s01_test_church --from evidence --no-review
+python tools/target_review.py --run outputs/s01_test_church/<newest run>
+```
+
 **Step 4 — source and licence.** For s01 and s03: page address, photographer, date, the building's name
 (`SOURCE.md` of each). For a publishable example: one photograph the author may publish.
 
@@ -225,7 +240,7 @@ items below to build next.
 | ID | What | Why it is open |
 |---|---|---|
 | R-004d | donor seen at another angle than the target (`t_002`): shear term or cross-photo donor | P6; a vertical scale did not help (T36) |
-| R5c | donor from another photograph of the building | P1; needs registration between photographs |
+| R-037a | reference donors: element mask instead of the box; a larger reference photograph | P1; T37 trial |
 | B3 | paired-rhythm (bay) rule | P7 |
 | R-004a to c | seam and score thresholds on more data | P2 |
 | T27 rest | point 5 with the author's facade mask | P4; waits for step 2 |

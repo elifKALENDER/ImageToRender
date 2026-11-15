@@ -109,8 +109,11 @@ def target_block(entry: dict) -> str:
     choice = entry.get("donor_choice")
     if choice:
         lines.insert(3, "<div class=meta>donor chosen by the expert instead of "
-                        f"<code>{esc(choice['automatic_donor_id'])}</code>"
+                        f"<code>{esc(choice['automatic_donor_id'] or 'none: ' + str(choice.get('automatic_reason')))}</code>"
                         + (f" ({esc(choice['note'])})" if choice.get("note") else "") + "</div>")
+    if entry.get("donor_photo"):
+        lines.insert(3, f"<div class=meta>the donor is on another photograph of the building "
+                        f"(<code>{esc(entry['donor_photo'])}</code>); the two photographs are not registered</div>")
     ext = entry.get("box_extension")
     if ext:
         lines.insert(3, f"<div class=meta>box extended at the {esc(ext['side'])} from {esc(entry.get('element_box'))} to "

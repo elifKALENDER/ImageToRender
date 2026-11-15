@@ -85,6 +85,7 @@ data/**
 !data/structures/*/SOURCE.md
 !data/structures/*/structure.yaml
 !data/structures/*/target_decisions.json
+!data/structures/*/reference_donors.json
 datasets/
 mnist_data/
 

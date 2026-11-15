@@ -46,6 +46,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from i2r import references
 from i2r.detect import load_elements
 from i2r.runio import ContractError, read_json, write_json
 
@@ -261,6 +262,7 @@ def seam_agreement(image: np.ndarray, mask: np.ndarray, photo: np.ndarray, damag
 
 
 TIER_B_GUESS_REASON = "tier B: position implied by a pattern, no fragment in the photograph"
+REFERENCE_GUESS_REASON = "donor from another photograph of the building"
 
 
 def judge(alignment: dict, seam: float | None, tier: str, ccfg: dict, tier_b_is_guess: bool = False) -> list[str]:
@@ -309,13 +311,16 @@ def paint(out: np.ndarray, labels: np.ndarray, window: list[int], image: np.ndar
 def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.ndarray,
              record: dict, donor_mask: np.ndarray, label: int, ccfg: dict,
              paint_guess: bool = True, tier_b_is_guess: bool = False,
-             decision: dict | None = None) -> dict[str, Any]:
+             decision: dict | None = None, donor_image: np.ndarray | None = None) -> dict[str, Any]:
     """Transfer one donor into one target. ``rgb`` is the untouched photograph (alignment and colour
     are measured on it); ``out`` and ``labels`` are written. A placement judged a guess (``judge``) is
     painted only when ``paint_guess``; the measurements are returned either way. ``decision`` is the
     expert's entry for this target, if any: it applies only to the placement it names."""
     target_box = record["target_box"]
-    patch, usable = donor_patch(rgb, damage, donor_mask, record["donor_box"], bool(record["flipped"]))
+    # ``donor_image``: the donor stands on another photograph (T37); that one has no damage mask
+    patch, usable = donor_patch(rgb if donor_image is None else donor_image,
+                                damage if donor_image is None else np.zeros(donor_image.shape[:2], np.uint8),
+                                donor_mask, record["donor_box"], bool(record["flipped"]))
     window = window_for(target_box, ccfg, damage.shape)
     if record["tier"] == "A":
         alignment = align(rgb, damage, patch, usable, target_box, window, ccfg)
@@ -336,6 +341,8 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
     seam, seam_px = seam_agreement(image, mask, rgb[wy1:wy2, wx1:wx2], damage_w, fill,
                                    int(ccfg["seam_band_px"]), int(ccfg["seam_min_px"]))
     reasons = judge(alignment, seam, record["tier"], ccfg, tier_b_is_guess)
+    if donor_image is not None and ccfg["reference_donor_is_guess"]:
+        reasons.append(REFERENCE_GUESS_REASON)
     accepted = not reasons
     is_painted = accepted or paint_guess
     acceptance: dict[str, Any] = {}
@@ -368,7 +375,7 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
 
 
 def target_panel(rgb: np.ndarray, damage: np.ndarray, result: np.ndarray, record: dict, donor_mask: np.ndarray,
-                 entry: dict, ccfg: dict) -> np.ndarray:
+                 entry: dict, ccfg: dict, donor_image: np.ndarray | None = None) -> np.ndarray:
     """One image per placed donor (T30): photograph | damage mask | donor as placed | result of this view,
     around the target box. The donor is drawn again from the recorded placement, so the panel also shows
     a guess that was not painted."""
@@ -382,7 +389,9 @@ def target_panel(rgb: np.ndarray, damage: np.ndarray, result: np.ndarray, record
     if lack > 0:
         crop[0], crop[2] = max(0, crop[0] - lack), min(width, crop[2] + lack)
     cx1, cy1, cx2, cy2 = crop
-    patch, usable = donor_patch(rgb, damage, donor_mask, record["donor_box"], bool(record["flipped"]))
+    patch, usable = donor_patch(rgb if donor_image is None else donor_image,
+                                damage if donor_image is None else np.zeros(donor_image.shape[:2], np.uint8),
+                                donor_mask, record["donor_box"], bool(record["flipped"]))
     al = entry["alignment"]
     donor, mask = warp(patch, usable, placement(box, al["scale"], al["dx"], al["dy"], al.get("aspect", 1.0)), crop)
     donor = np.clip(donor.astype(np.float32) + np.asarray(entry["colour_shift"], np.float32), 0, 255).astype(np.uint8)
@@ -602,7 +611,8 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
                   donor_masks: dict[str, np.ndarray], config: dict,
                   generate: Callable[[np.ndarray, np.ndarray, dict], tuple[np.ndarray, dict]] | None = None,
                   facade: np.ndarray | None = None,
-                  decisions: dict[str, dict] | None = None) -> tuple[np.ndarray, np.ndarray, dict]:
+                  decisions: dict[str, dict] | None = None,
+                  donor_images: dict[str, np.ndarray] | None = None) -> tuple[np.ndarray, np.ndarray, dict]:
     """Apply one view's rule. Returns (completed image, uint16 label image, report).
 
     ``decisions`` maps ``decision_key(record)`` to the expert's entry for that target (T31).
@@ -622,6 +632,8 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
                  "donor_id": record.get("donor_id"), "rule_reason": why}
         if record.get("donor_choice"):
             entry["donor_choice"] = record["donor_choice"]         # T34: the expert named this donor
+        if record.get("donor_photo"):
+            entry["donor_photo"] = record["donor_photo"]           # T37: the donor is on another photograph
         if not do_it:
             entry.update({"status": "not_completed", "method": "none", "pixels_changed": 0})
         elif not record.get("donor_id"):
@@ -634,7 +646,8 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
                             paint_guess=GUESS_IS_PAINTED[view],
                             # only where a guess is painted: restoration.include_tier_b stays a plain switch
                             tier_b_is_guess=GUESS_IS_PAINTED[view] and bool(config["first_construction"]["tier_b_is_guess"]),
-                            decision=(decisions or {}).get(decision_key(record)))
+                            decision=(decisions or {}).get(decision_key(record)),
+                            donor_image=(donor_images or {}).get(record["donor_id"]))
             accepted, is_painted = info["acceptance"]["accepted"], info["acceptance"]["painted"]
             expert, reasons = info["acceptance"].get("expert"), info["acceptance"]["reasons"]
             if not is_painted:
@@ -695,10 +708,14 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
 # Step
 # ---------------------------------------------------------------------------
 
-def load_donor_masks(run: "Run", elements: list[dict], records: list[dict], size: tuple[int, int]) -> dict[str, np.ndarray]:
+def load_donor_masks(run: "Run", elements: list[dict], records: list[dict], size: tuple[int, int],
+                     donor_images: dict[str, np.ndarray] | None = None) -> dict[str, np.ndarray]:
     by_id = {e["id"]: e for e in elements}
     masks = {}
     for donor_id in {r["donor_id"] for r in records if r.get("donor_id")}:
+        if donor_id in (donor_images or {}):               # reference donor: its mask is its box
+            masks[donor_id] = np.ones(donor_images[donor_id].shape[:2], np.uint8)
+            continue
         if donor_id not in by_id:
             raise ContractError(f"evidence.json names donor {donor_id!r}, which is not in elements.json")
         path = run.path(by_id[donor_id]["mask_file"])
@@ -755,10 +772,11 @@ def read_donor_choices(path) -> dict[str, dict]:
 
 def apply_donor_choices(records: list[dict], elements: list[dict],
                         choices: dict[str, dict]) -> tuple[list[dict], list[str]]:
-    """Replace the automatic donor of a tier A target by the one the expert named (T34). Returns the
+    """Replace the automatic donor of a fragment by the one the expert named (T34). Returns the
     records (changed ones are copies; ``evidence.json`` keeps the automatic choice) and one message per
-    choice. A choice that cannot be used (unknown, rejected or other-class element, the target itself, a
-    target that is not tier A) is ignored with the reason: the automatic donor stays."""
+    choice. A fragment that got no donor (tier C: no candidate, or none similar enough) becomes tier A
+    by the expert's choice (T37); the record says so. A choice that cannot be used (unknown, rejected or
+    other-class element, the target itself, a target without a fragment) is ignored with the reason."""
     by_id = {e["id"]: e for e in elements}
     by_key = {decision_key(r): i for i, r in enumerate(records)}
     out, messages = list(records), []
@@ -768,8 +786,8 @@ def apply_donor_choices(records: list[dict], elements: list[dict],
         record = records[index] if index is not None else None
         if record is None:
             problem = "no such target in this run"
-        elif record["tier"] != "A":
-            problem = f"target is tier {record['tier']}, a donor can be chosen for tier A only"
+        elif record["kind"] != "fragmented_element":
+            problem = "a donor can be named for a fragmented element only"
         elif donor is None:
             problem = f"element {choice['donor_id']!r} is not in elements.json"
         elif donor.get("rejected"):
@@ -778,7 +796,7 @@ def apply_donor_choices(records: list[dict], elements: list[dict],
             problem = f"element {donor['id']} is a {donor['class']}, the target a {record['class']}"
         elif donor["id"] == record.get("element_id"):
             problem = "an element cannot be its own donor"
-        elif not donor.get("mask_file"):
+        elif not donor.get("mask_file") and not donor.get("reference_photo"):
             problem = f"element {donor['id']} has no mask"
         else:
             problem = None
@@ -790,11 +808,13 @@ def apply_donor_choices(records: list[dict], elements: list[dict],
         info = {"donor_id": donor["id"], "donor_box": donor["box"], "flipped": choice["flipped"],
                 "similarity": similarity, "donor_damage_status": donor.get("damage_status"),
                 "automatic_donor_id": record["donor_id"], "automatic_flipped": record["flipped"],
+                "automatic_tier": record["tier"], "automatic_reason": record.get("reason"),
                 "note": choice.get("note") or ""}
         out[index] = {**record, "donor_id": donor["id"], "donor_box": donor["box"], "flipped": choice["flipped"],
-                      "donor_choice": info}
+                      "donor_photo": donor.get("reference_photo"), "donor_choice": info,
+                      "tier": "A", "reason": None, "confidence": record["confidence"] or similarity or 0.0}
         messages.append(f"{record['target_id']} ({key}): donor {donor['id']}{' flipped' if choice['flipped'] else ''} "
-                        f"chosen by the expert instead of {record['donor_id']}")
+                        f"chosen by the expert instead of {record['donor_id'] or 'none (tier ' + record['tier'] + ')'}")
     return out, messages
 
 
@@ -832,10 +852,11 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
         raise ContractError(f"{mask_path}: size differs from {run.image_path}")
     size = (rgb.shape[1], rgb.shape[0])
     decisions, donor_choices = load_decisions(run)
-    records, messages = apply_donor_choices(records, elements, donor_choices)
+    ref_donors, donor_images = references.load_from_run(run.run_dir)
+    records, messages = apply_donor_choices(records, list(elements) + ref_donors, donor_choices)
     for message in messages:
         log.info("[complete] %s", message)
-    donor_masks = load_donor_masks(run, elements, records, size)
+    donor_masks = load_donor_masks(run, elements, records, size, donor_images)
     facade = load_facade_mask(run, evidence, damage.shape)
     by_id = {r["target_id"]: r for r in records}
     targets_dir = run.path(TARGETS_DIR)
@@ -853,14 +874,15 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
             return generative_fill(image, area, config, log)
 
         out, labels, view_report = complete_view(view, rgb, damage, records, donor_masks, run.config, generate,
-                                                 facade, decisions)
+                                                 facade, decisions, donor_images)
         for e in view_report["targets"]:
             if "alignment" in e:
                 record = by_id[e["target_id"]]
                 e["panel_file"] = f"{TARGETS_DIR}/{e['target_id']}_{view}.png"
                 e["decision_key"] = decision_key(record)
                 Image.fromarray(target_panel(rgb, damage, out, record, donor_masks[record["donor_id"]], e,
-                                             run.config["complete"])).save(run.path(e["panel_file"]))
+                                             run.config["complete"], donor_images.get(record["donor_id"]))
+                                ).save(run.path(e["panel_file"]))
         gen = view_report.get("generative")
         if gen is not None:
             debug = gen.pop("debug")

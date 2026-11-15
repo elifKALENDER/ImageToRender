@@ -227,6 +227,10 @@ complete:
   # Extra factor on the donor's height only, searched together with the scale (T36). [1.0] = one scale
   # for both directions.
   refine_aspects: [1.0]
+  # T37: a donor boxed on another photograph of the building (data/structures/<id>/reference_donors.json)
+  # is placed as a guess for the expert, never as an automatic completion: nothing registers the two
+  # photographs, and light, angle and resolution differ.
+  reference_donor_is_guess: true
   # The search runs only when at least this many visible fragment pixels overlap the donor.
   refine_min_visible_px: 50
   # Shift the donor's mean colour to the fragment's visible part (lighting differs across a facade).

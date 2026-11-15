@@ -15,7 +15,7 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: T26 and T28 to T36 are done (2026-11-15). T27: the mechanism is done, but point 5 of the
+- **After v0.1.0: T26 and T28 to T37 are done (2026-11-15). T27: the mechanism is done, but point 5 of the
   failure analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`).
   Phase 3 has no open coding task; what is open is the author's manual input (see `docs/STATUS.md`).** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
@@ -783,6 +783,30 @@ stale). Cause of `t_002` found instead: the donor `arch_005` is seen at an angle
 19 px above its box bottom (left 9 px; all other intact arches within 4 px); a scale cannot correct that.
 Open: R-004d. 176 tests.*
 **Files.** `i2r/complete.py`, `i2r/render.py`, `config.yaml`, `tests/test_complete.py`.
+
+### T37. Donor from another photograph of the building (added 2026-11-15; was R5c)
+*Status: mechanism done 2026-11-15, chosen by the assistant when the author left the next step open;
+result on s01 poor with the photograph at hand. `i2r/references.py`, `tools/reference_donors.py`.
+The author boxes intact elements on another photograph (`data/structures/<id>/reference_donors.json`,
+tracked; the photograph in `references/`, local). The evidence step copies both into the run folder and
+offers each box as one more intact donor `ref:<id>`: proportions instead of sizes in the size filter, its
+box as its mask, chosen automatically only when no donor of the same photograph reaches `min_similarity`.
+A placement from it is always a guess (`complete.reference_donor_is_guess`). In `tools/target_review.py`
+the expert can name any donor, also for a fragment that got none (tier C by the automatic rules); it then
+becomes tier A "by the expert's choice", recorded with the automatic tier and reason.
+Trial on s01 (n = 1 building; boxes drawn by the assistant on `470553649...n.jpg`, 567 x 800, not by the
+expert): one base and one arch. Automatic: no change, the similarities are 0.74 and 0.78 for the bases
+and below `arch_005` for the arch, so the reference run is byte-identical. Named by hand (run
+`20261115_103148`, a trial, not a result): bases `t_010`, `t_011` alignment score 0.21 and 0.24, arch
+`t_002` 0.80 with seam 0.59. Seen in the panels: the patches are blurred (the reference photograph has
+about half the resolution of s01) and rectangular (the whole box is pasted, wall included); the arch
+does reach both capitals. **Not usable as a result with this photograph**; the mechanism needs a larger
+reference photograph and, for narrow elements, a mask instead of the box (R-037a). 186 tests.*
+**What.** P1 of `docs/STATUS.md`: most damage has no evidence on the photograph itself.
+**Files.** `i2r/references.py`, `i2r/evidence.py`, `i2r/complete.py`, `i2r/render.py`, `i2r/report.py`,
+`tools/reference_donors.py`, `tools/target_review.py`, `config.yaml`, `tests/test_references.py`.
+**Accept.** A boxed element of another photograph can be placed as a marked guess and is recorded with
+its photograph; without the expert's choice or a similarity above the threshold nothing changes.
 
 ---
 

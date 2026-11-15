@@ -410,8 +410,11 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
         choice = next((e["donor_choice"] for by_id in per_view.values()
                        if (e := by_id.get(r["target_id"])) and e.get("donor_choice")), None)
         if choice:
-            r = {**r, "donor_id": choice["donor_id"], "donor_box": choice["donor_box"],
-                 "flipped": choice["flipped"], "similarity": choice["similarity"]}
+            r = {**r, "tier": "A", "reason": None,            # T37: also a fragment that had no donor
+                 "donor_id": choice["donor_id"], "donor_box": choice["donor_box"],
+                 "flipped": choice["flipped"], "similarity": choice["similarity"],
+                 "donor_photo": next((e.get("donor_photo") for by_id in per_view.values()
+                                      if (e := by_id.get(r["target_id"]))), None)}
         entries.append({
             "target_id": r["target_id"],
             "kind": r["kind"],
@@ -426,6 +429,7 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
             "donor_id": r["donor_id"],
             "donor_box": r["donor_box"],
             "donor_choice": choice,
+            "donor_photo": r.get("donor_photo"),
             "similarity": r.get("similarity"),
             "confidence": r["confidence"],
             "alternatives": r.get("alternatives", []),

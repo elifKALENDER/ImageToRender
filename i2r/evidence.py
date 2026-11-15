@@ -54,6 +54,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from i2r import references
 from i2r.detect import load_elements
 from i2r.runio import ContractError, read_json, write_json
 
@@ -103,6 +104,11 @@ def size_ratios(target_box: list[int], donor_box: list[int]) -> tuple[float, flo
 def filter_size(target: dict, donor: dict, ecfg: dict) -> Optional[str]:
     tol = float(ecfg["size_tolerance"])
     rw, rh = size_ratios(target["box"], donor["box"])
+    if donor.get("reference_photo"):
+        # another photograph, another scale: only the proportions can be compared (T37)
+        if abs(rw / rh - 1.0) > tol:
+            return f"proportion ratio {rw / rh:.2f} outside 1 +/- {tol:.2f} (reference photograph)"
+        return None
     if abs(rw - 1.0) > tol or abs(rh - 1.0) > tol:
         return f"size ratio w {rw:.2f}, h {rh:.2f} outside 1 +/- {tol:.2f}"
     return None
@@ -193,11 +199,12 @@ SCORERS: dict[str, Callable[[np.ndarray, np.ndarray], float]] = {
 
 def no_donor_reason(element_class: str, rejected: list[dict[str, str]]) -> str:
     """Why no same-class donor is left, e.g. 'no usable donor of class 'arch': 2 not intact, 1 size'."""
-    if not any(r["reason"].startswith("size ratio") for r in rejected):
+    size_words = ("size ratio", "proportion ratio")
+    if not any(r["reason"].startswith(size_words) for r in rejected):
         return f"no intact element of class {element_class!r}"
     counts: dict[str, int] = {}
     for r in rejected:
-        key = "size" if r["reason"].startswith("size ratio") else r["reason"].split(" (")[0]
+        key = "size" if r["reason"].startswith(size_words) else r["reason"].split(" (")[0]
         counts[key] = counts.get(key, 0) + 1
     parts = ", ".join(f"{n} {k}" for k, n in counts.items())
     return f"no usable donor of class {element_class!r}: {parts}"
@@ -245,8 +252,12 @@ def find_tier_a(
     damage: np.ndarray,
     ecfg: dict[str, Any],
     embed: Embed,
+    reference: tuple[list[dict], dict[str, np.ndarray]] | None = None,
 ) -> list[dict[str, Any]]:
-    """One record per fragmented element, in element order."""
+    """One record per fragmented element, in element order. ``reference`` = (donors boxed on other
+    photographs of the building, {donor ID: that photograph}) (``i2r/references.py``); such a donor is
+    chosen only when no donor of this photograph reaches ``min_similarity``."""
+    ref_donors, ref_images = reference or ([], {})
     size = int(ecfg["crop_px"])
     targets = [e for e in elements if not e.get("rejected") and e.get("damage_status") == "fragmented"]
 
@@ -267,14 +278,19 @@ def find_tier_a(
         plan["t_index"] = len(crops)
         crops.append(to_model_size(t_img, size))
         donor_hole = hole if ecfg["mask_donor_like_target"] else None
-        for donor in elements:
+        for donor in list(elements) + ref_donors:
             reason = next((r for f in DONOR_FILTERS if (r := f(target, donor, ecfg))), None)
             if reason is not None:
                 if donor["class"] == target["class"] and donor["id"] != target["id"]:
                     plan["rejected"].append({"donor_id": donor["id"], "reason": reason})
                 continue
             for flipped in ([False, True] if ecfg["try_flipped_donor"] else [False]):
-                d_img = donor_crop(rgb, damage, donor["box"], target["box"], donor_hole, flipped)
+                if donor.get("reference_photo"):
+                    photo = ref_images[donor["id"]]
+                    d_img = donor_crop(photo, np.zeros(photo.shape[:2], np.uint8), donor["box"], target["box"],
+                                       donor_hole, flipped)
+                else:
+                    d_img = donor_crop(rgb, damage, donor["box"], target["box"], donor_hole, flipped)
                 plan["pairs"].append((Candidate(donor, flipped), len(crops)))
                 crops.append(to_model_size(d_img, size))
         plans.append(plan)
@@ -301,6 +317,10 @@ def find_tier_a(
             if current is None or cand.similarity > current.similarity:
                 best_per_donor[cand.donor["id"]] = cand
         ranked = sorted(best_per_donor.values(), key=lambda c: -c.similarity)
+        # a donor of this photograph that qualifies goes before any reference donor, whatever the scores
+        own = [c for c in ranked if not c.donor.get("reference_photo") and c.similarity >= float(ecfg["min_similarity"])]
+        if own:
+            ranked = own + [c for c in ranked if c not in own]
 
         record: dict[str, Any] = {
             "target_id": f"t_{number:03d}",
@@ -330,6 +350,7 @@ def find_tier_a(
             "donor_id": best.donor["id"] if best and reason is None else None,
             "donor_box": best.donor["box"] if best and reason is None else None,
             "flipped": best.flipped if best and reason is None else None,
+            "donor_photo": best.donor.get("reference_photo") if best and reason is None else None,
             "similarity": best.similarity if best else None,
             "confidence": best.similarity if best and reason is None else 0.0,
             "alternatives": [
@@ -794,7 +815,7 @@ def draw_overlay(rgb: np.ndarray, damage: np.ndarray, records: list[dict[str, An
         color = TIER_COLOR[r["tier"]]
         x1, y1, x2, y2 = r["target_box"]
         cv2.rectangle(out, (x1, y1), (x2 - 1, y2 - 1), color, 2, cv2.LINE_AA)
-        if r["donor_box"]:
+        if r["donor_box"] and not r.get("donor_photo"):      # a reference donor is not on this photograph
             dx1, dy1, dx2, dy2 = r["donor_box"]
             cv2.rectangle(out, (dx1, dy1), (dx2 - 1, dy2 - 1), color, 1, cv2.LINE_AA)
             cv2.arrowedLine(out, centre(r["donor_box"]), centre(r["target_box"]), color, 1, cv2.LINE_AA, tipLength=0.04)
@@ -805,7 +826,8 @@ def draw_overlay(rgb: np.ndarray, damage: np.ndarray, records: list[dict[str, An
 
 
 def draw_sheet(rgb: np.ndarray, damage: np.ndarray, records: list[dict[str, Any]],
-               elements: dict[str, dict], tile_h: int = 150) -> np.ndarray:
+               elements: dict[str, dict], tile_h: int = 150,
+               ref_images: dict[str, np.ndarray] | None = None) -> np.ndarray:
     """Rows: fragment (hole tinted) | chosen donor as transferred | alternatives."""
     rows = []
     for r in records:
@@ -821,7 +843,10 @@ def draw_sheet(rgb: np.ndarray, damage: np.ndarray, records: list[dict[str, Any]
         chosen = ([{"donor_id": r["donor_id"], "similarity": r["similarity"], "flipped": r["flipped"]}]
                   if r["donor_id"] else []) + r["alternatives"]
         for c in chosen:
-            img = donor_crop(rgb, damage, elements[c["donor_id"]]["box"], box, None, c["flipped"])
+            photo = (ref_images or {}).get(c["donor_id"])
+            img = (donor_crop(rgb, damage, elements[c["donor_id"]]["box"], box, None, c["flipped"]) if photo is None
+                   else donor_crop(photo, np.zeros(photo.shape[:2], np.uint8), elements[c["donor_id"]]["box"], box,
+                                   None, c["flipped"]))
             score = f"{c['similarity']:.2f}" if c["similarity"] is not None else f"conf {r['confidence']:.2f}"
             tiles.append((img, f"{c['donor_id']} {score}{' F' if c['flipped'] else ''}"))
         if not chosen and r["reason"]:
@@ -901,9 +926,14 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
     if rgb.shape[:2] != damage.shape:
         raise ContractError(f"{mask_path}: size differs from {run.image_path}")
 
+    n_ref = references.copy_into_run(run.structure_dir, run.run_dir, list(run.config["classes"]))
+    reference = references.load_from_run(run.run_dir)
+    if n_ref:
+        log.info("[evidence] %d reference donor(s) from other photograph(s) of the building: %s", n_ref,
+                 ", ".join(d["id"] for d in reference[0]))
     embedder = Dinov2Embedder(ecfg, log)
     try:
-        records = find_tier_a(elements, rgb, damage, ecfg, embedder)
+        records = find_tier_a(elements, rgb, damage, ecfg, embedder, reference)
     finally:
         embedder.close()
 
@@ -959,11 +989,12 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
                     "donor_not_marked_as_prototype_by_expert": flagged},
         "facade": facade_info,
         "tier_b_diagnostics": b_diag,
+        "reference_donors": [{k: d[k] for k in ("id", "class", "box", "reference_photo")} for d in reference[0]],
         "targets": records,
     })
-    by_id = {e["id"]: e for e in elements}
+    by_id = {e["id"]: e for e in list(elements) + reference[0]}
     Image.fromarray(draw_overlay(rgb, damage, records, c_masks)).save(run.path(OVERLAY))
-    Image.fromarray(draw_sheet(rgb, damage, records, by_id)).save(run.path(SHEET))
+    Image.fromarray(draw_sheet(rgb, damage, records, by_id, ref_images=reference[1])).save(run.path(SHEET))
 
     log.info("[evidence] %d target(s): %s", len(records), by_tier)
     for r in records:
