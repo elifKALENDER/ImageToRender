@@ -39,7 +39,8 @@ MASK_DIR = "element_masks"
 
 DOCUMENT_KEYS = ("structure_id", "image_size", "classes", "elements")
 ELEMENT_KEYS = ("id", "class", "box", "score", "mask_file", "source")
-VALID_SOURCES = ("detector", "expert")
+# "assistant_draft": boxes drawn by the assistant as a starting point, to be replaced by the expert's
+VALID_SOURCES = ("detector", "expert", "assistant_draft")
 
 
 # ---------------------------------------------------------------------------

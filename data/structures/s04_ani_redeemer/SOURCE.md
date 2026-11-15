@@ -36,7 +36,7 @@ assistant's (reasons below), the author left it open.
 | `source_Church_of_the_Holy_Redeemer_-_Ani_Ruins.jpg` | No | The file as downloaded (SHA-256 starts `af0e5192789e01bc`). |
 | `image.png` | No | The crop named above. Not tracked by default; the licence would allow it with attribution, which is the author's decision. |
 | `structure.yaml` | Yes | The `column` to `pilaster` merge of s01, same element type. |
-| `damage_mask.png` | No | **Draft by the assistant (2026-11-15), not reviewed by the author.** Made by a colour rule inside a hand-set rectangle round the breach (x 850-1230, y 1230-1840): pixels of low saturation and high brightness (HSV S < 55, V > 115: the grey rubble core against the red facing stone) or very dark (V < 38: holes), opened 5 px, closed 21 px, components of 2,500 px or more; 95,420 px, 3.3 % of the image. Added the same day: the strip at the upper left edge of the drum (y 470-820) where the building's silhouette (SAM, one box round the building) is narrower than its mirror image about the axis x = 749 (the median mid-line of the lower tier); elsewhere the silhouette agrees with its mirror image within about 25 px. Known faults: a strip of shadow left of the standing colonnette is marked, small unmarked spots lie inside the breach, the broken cornice above is not marked. To be corrected in `tools/mask_editor.py` (it opens with this file loaded). Results made with the uncorrected draft are not results. |
+| `damage_mask.png` | No | **Version 1, drawn by the author on 2026-11-15** in `tools/mask_editor.py`, starting from the assistant's colour-rule draft (copy: `damage_mask_v1_author_20261115.png`). 397,558 px, 13.5 % of the image, three regions: a band along the whole left side of the building, the breach in the lower arcade down to the ground, and the foot at the lower right. The author's note: the brush also passes over intact parts; the band is where the building stood. Measured: 59 % of the mask lies outside the building's silhouette (SAM), i.e. on sky and ground. |
 
 ## The other photographs in `data/incoming/` (not processed)
 
@@ -50,6 +50,6 @@ assistant's (reasons below), the author left it open.
 
 ## Open actions (author)
 
-- Correct the draft `damage_mask.png` with `tools/mask_editor.py --structure s04_ani_redeemer` and save it.
-- Correct the element inventory in the editor.
+- Mask version 1 is drawn. If wanted: erase it where it lies on standing stone (mask pixels are the only pixels the pipeline may change).
+- Replace the assistant's draft inventory (13 boxes of the lower arcade only, `source: assistant_draft`, run `outputs/s04_ani_redeemer/20261115_132443`) by an inventory of your own in the editor; the upper arcade is not in it.
 - Decide whether `image.png` is committed (the licence allows it with attribution).
