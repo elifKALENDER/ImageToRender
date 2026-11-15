@@ -224,6 +224,9 @@ complete:
   # target box size (1 px steps) and these scale factors; score = grey-level normalised correlation.
   refine_shift_frac: 0.10           # initial guess, not calibrated
   refine_scales: [0.94, 1.0, 1.06]  # initial guess, not calibrated
+  # Extra factor on the donor's height only, searched together with the scale (T36). [1.0] = one scale
+  # for both directions.
+  refine_aspects: [1.0]
   # The search runs only when at least this many visible fragment pixels overlap the donor.
   refine_min_visible_px: 50
   # Shift the donor's mean colour to the fragment's visible part (lighting differs across a facade).

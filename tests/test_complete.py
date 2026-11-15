@@ -173,7 +173,8 @@ class AcceptanceTest(unittest.TestCase):
         entry = report["targets"][0]
         self.assertEqual(entry["status"], "completed")
         self.assertEqual(entry["acceptance"], {"accepted": True, "reasons": [], "painted": True})
-        self.assertEqual(entry["alignment"]["limits"], {"dx": 3, "dy": 6, "scales": [0.94, 1.0, 1.06]})
+        self.assertEqual(entry["alignment"]["limits"], {"dx": 3, "dy": 6, "scales": [0.94, 1.0, 1.06],
+                                                       "aspects": [1.0]})
         self.assertEqual(entry["alignment"]["on_bound"], ["dx"])       # the true shift (3) is the search limit
         self.assertGreater(entry["seam_agreement"], 0.9)
         self.assertGreater(entry["seam_px"], 0)
@@ -328,6 +329,18 @@ class GenerativeTest(unittest.TestCase):
                                               {"donor": donor_mask}, config(), fake_generate(calls))
         self.assertEqual(calls, [])
         self.assertIsNone(report["generative"])
+
+
+class AspectTest(unittest.TestCase):
+    def test_aspect_changes_the_height_only(self) -> None:
+        self.assertEqual(complete.placement([10, 20, 30, 60], 1.0, 0, 0), (10.0, 20.0, 20.0, 40.0))
+        self.assertEqual(complete.placement([10, 20, 30, 60], 1.0, 0, 0, 1.5), (10.0, 10.0, 20.0, 60.0))
+
+    def test_signature_names_the_aspect_only_when_it_is_used(self) -> None:
+        rec = {"donor_id": "d", "flipped": False}
+        plain = complete.placement_signature(rec, {"scale": 1.0, "dx": 0, "dy": 0, "aspect": 1.0})
+        self.assertNotIn("aspect", plain)                       # decisions made before T36 still match
+        self.assertEqual(complete.placement_signature(rec, {"scale": 1.0, "dx": 0, "dy": 0, "aspect": 1.06})["aspect"], 1.06)
 
 
 if __name__ == "__main__":

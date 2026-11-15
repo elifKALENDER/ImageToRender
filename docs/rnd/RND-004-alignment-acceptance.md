@@ -148,6 +148,41 @@ and `pilaster_010`, 0.46 to 0.13) and rises in three. A larger search fits the v
 `config.yaml` is unchanged. An anisotropic scale (separate x and y factors) was **not** tried: it adds a
 search dimension, and this result gives no reason to expect a gain from more freedom.
 
+## Separate vertical scale (T36, 2026-11-15)
+
+Tried because the expert rejected `t_002` ("the arch end should come down to the pilaster's capital") and
+the search has one scale for both directions. `complete.refine_aspects` is an extra factor on the donor's
+height, searched with the scale; tried with 0.88, 0.94, 1.0, 1.06, 1.12 (`eval_20261115_101947`, s01 run
+`20261115_101920`).
+
+| Case | Fidelity, one scale | Fidelity, with aspect | Seam, one scale | Seam, with aspect |
+|---|---|---|---|---|
+| arch_004 | 0.65 | 0.81 | 0.93 | 0.95 |
+| arch_005 | 0.77 | 0.77 | 0.91 | 0.91 |
+| arch_007 | 0.78 | 0.80 | 0.77 | 0.90 |
+| pilaster_011 | 0.10 | 0.23 | 0.42 | 0.33 |
+| pilaster_010 | 0.46 | 0.48 | 0.63 | 0.08 |
+| recovered_arch_016 | 0.71 | 0.71 | 0.90 | 0.89 |
+| recovered_pilaster_008 | 0.47 | 0.32 | 0.07 | 0.21 |
+| recovered_arch_065 | 0.29 | 0.40 | 0.17 | 0.34 |
+| expert_cornice_020 | -0.06 | -0.07 | -0.40 | -0.34 |
+
+- Mean fidelity 0.46 to 0.49: higher in 5 cases, equal in 2, lower in 2. The two groups stay the same;
+  5 of 9 cases end on the aspect bound.
+- **It does not solve `t_002`.** With the aspect searched the placed arch is smaller, not longer (scale
+  0.94, aspect 1.06), and its right leg still ends above the capital.
+- **Cause of `t_002`, measured on the donor.** In the mask of `arch_005` the left leg ends 9 px and the
+  right leg 19 px above the bottom of its box; in every other intact arch both legs end within 4 px of
+  it. `arch_005` is seen at an angle: its right springing lies higher in the image than its left, and
+  its box reaches down to the lower one. The target arch is seen more frontally, with both capitals at
+  one height. A scale cannot make one leg longer than the other; that would need a shear or a
+  perspective term, or a donor seen from the same angle. `arch_005` is also the only arch that passes
+  the size filter for this target. **(The reading of the viewing angle is the assistant's, from the
+  image; the leg lengths are measured.)**
+- On s01 the aspect search changes six of the seven placements, so every expert decision but one would
+  go stale, for a mean gain of 0.03 on 9 cases. **`refine_aspects` stays [1.0]** (off); the option is
+  kept.
+
 ## Synthetic test with the thresholds on
 
 28 cases, `eval_20261114_130637`: preservation 0 in every row; tiers and recovery unchanged (partial 9 of
@@ -168,5 +203,7 @@ first-construction view.
 
 - **R-004a.** Does the seam threshold hold on another photograph or building? Needs cases from one.
 - **R-004b.** Is the low group a matter of class or of size? Needs larger pilasters (a larger photograph).
+- **R-004d.** A donor seen at another angle than its target (`arch_005` for `t_002`): shear or
+  perspective term in the placement, or a donor from another photograph (R5c). Not tried.
 - **R-004c.** Synthetic cases whose score falls between 0.58 and 0.85 (irregular cuts, smaller visible
   parts) to place `min_alignment_score` on data.

@@ -400,7 +400,7 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
             if e.get("method") == "donor_transfer":
                 method = e["method"]
             if "alignment" in e and e["status"] in ("completed", GUESS, REJECTED):
-                alignment[view] = {**{k: e["alignment"].get(k) for k in ("dx", "dy", "scale", "score_before", "score",
+                alignment[view] = {**{k: e["alignment"].get(k) for k in ("dx", "dy", "scale", "aspect", "score_before", "score",
                                                                         "on_bound", "limits")},
                                    "seam_agreement": e.get("seam_agreement")}
                 acceptance[view] = e.get("acceptance")

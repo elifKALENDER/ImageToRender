@@ -15,7 +15,7 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: T26 and T28 to T35 are done (2026-11-14). T27: the mechanism is done, but point 5 of the
+- **After v0.1.0: T26 and T28 to T36 are done (2026-11-15). T27: the mechanism is done, but point 5 of the
   failure analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`).
   Phase 3 has no open coding task; what is open is the author's manual input (see `docs/STATUS.md`).** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
@@ -773,6 +773,16 @@ evidence", which said the wrong thing: a fragment and a donor exist there, the e
 placement. s01 (run `20261114_170229`): 4,162 px in the two rejected boxes (`t_002`, `t_006`) moved from
 "no evidence" to "rejected"; completed images unchanged. 174 tests.*
 **Files.** `i2r/render.py`, `i2r/report.py`, `config.yaml`, `tests/test_render.py`.
+
+### T36. Separate vertical scale in the alignment search (experiment, 2026-11-15)
+*Status: done as an experiment, result negative for its purpose; `docs/rnd/RND-004-alignment-acceptance.md`
+section "Separate vertical scale". `complete.refine_aspects` (extra factor on the donor's height) exists
+and is `[1.0]`, i.e. off. With five values the mean fidelity of the 9 synthetic cases rose from 0.46 to
+0.49 (5 up, 2 down), `t_002` was not solved, and six of seven s01 placements changed (expert decisions
+stale). Cause of `t_002` found instead: the donor `arch_005` is seen at an angle and its right leg ends
+19 px above its box bottom (left 9 px; all other intact arches within 4 px); a scale cannot correct that.
+Open: R-004d. 175 tests.*
+**Files.** `i2r/complete.py`, `i2r/render.py`, `config.yaml`, `tests/test_complete.py`.
 
 ---
 

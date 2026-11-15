@@ -14,7 +14,7 @@
 | Branch | `fix/failure-analysis`, ahead of `main` (`v0.1.0`); not merged, which is the author's decision |
 | Structures | **n = 1 building** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only so far |
 | Reference run | `outputs/s01_test_church/20261114_170229` (generative fill off, the author's decisions applied). Open `report.html` in it |
-| Tests | 174 pass (`python -m unittest discover tests`, no GPU) |
+| Tests | 175 pass (`python -m unittest discover tests`, no GPU) |
 
 Statements marked **(guess)** are the assistant's reading, not a measurement.
 
@@ -134,7 +134,9 @@ Ordered by how much they limit a presentable result.
   the strip in between is damaged. All four are extended and placed; all four are guesses.
   `t_005` (`recovered_pilaster_020`) has alignment score -0.04 and is probably not usable **(guess)**.
 - **Not covered.** `t_002`: the arch's box already reaches the capital, the placed arch leg does not.
-  That is placement (one scale for both directions), see P5.
+  A separate vertical scale was tried (T36) and does not help. Measured cause: the only usable donor,
+  `arch_005`, is seen at an angle and its right leg ends 19 px above its box bottom (RND-004). Open as
+  R-004d; until then `t_002` stays rejected or is accepted as a partial completion, the expert's call.
 - **Needs the author.** The review of step 1. The extension can be overruled by drawing the box in the
   editor: a box that already has the row's extent is not changed.
 
@@ -222,7 +224,7 @@ items below to build next.
 
 | ID | What | Why it is open |
 |---|---|---|
-| — | arch leg that stops short of the capital (`t_002`) | P5, P6 |
+| R-004d | donor seen at another angle than the target (`t_002`): shear term or cross-photo donor | P6; a vertical scale did not help (T36) |
 | R5c | donor from another photograph of the building | P1; needs registration between photographs |
 | B3 | paired-rhythm (bay) rule | P7 |
 | R-004a to c | seam and score thresholds on more data | P2 |

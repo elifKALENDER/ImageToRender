@@ -122,8 +122,11 @@ def decision_key(record: dict) -> str:
 
 def placement_signature(record: dict, alignment: dict) -> dict:
     """What an expert decision is about: this donor, placed this way."""
-    return {"donor_id": record["donor_id"], "flipped": bool(record["flipped"]),
-            "scale": float(alignment["scale"]), "dx": int(alignment["dx"]), "dy": int(alignment["dy"])}
+    signature = {"donor_id": record["donor_id"], "flipped": bool(record["flipped"]),
+                 "scale": float(alignment["scale"]), "dx": int(alignment["dx"]), "dy": int(alignment["dy"])}
+    if float(alignment.get("aspect", 1.0)) != 1.0:           # T36; absent at 1.0 so older decisions still match
+        signature["aspect"] = float(alignment["aspect"])
+    return signature
 
 
 # ---------------------------------------------------------------------------
@@ -141,10 +144,12 @@ def donor_patch(rgb: np.ndarray, damage: np.ndarray, donor_mask: np.ndarray, box
     return patch, usable
 
 
-def placement(target_box: list[int], scale: float, dx: int, dy: int) -> tuple[float, float, float, float]:
-    """(x1, y1, width, height) of the donor's image after scaling about the target centre and shifting."""
+def placement(target_box: list[int], scale: float, dx: int, dy: int,
+              aspect: float = 1.0) -> tuple[float, float, float, float]:
+    """(x1, y1, width, height) of the donor's image after scaling about the target centre and shifting.
+    ``aspect`` is an extra factor on the height only (T36)."""
     x1, y1, x2, y2 = target_box
-    w, h = (x2 - x1) * scale, (y2 - y1) * scale
+    w, h = (x2 - x1) * scale, (y2 - y1) * scale * aspect
     cx, cy = (x1 + x2) / 2 + dx, (y1 + y2) / 2 + dy
     return cx - w / 2, cy - h / 2, w, h
 
@@ -179,15 +184,16 @@ def window_for(target_box: list[int], ccfg: dict, shape: tuple[int, int]) -> lis
     x1, y1, x2, y2 = target_box
     w, h = x2 - x1, y2 - y1
     grow = max(ccfg["refine_scales"]) - 1.0
+    grow_y = max(ccfg["refine_scales"]) * max(ccfg["refine_aspects"]) - 1.0
     mx = int(np.ceil(ccfg["refine_shift_frac"] * w + grow * w / 2)) + 1
-    my = int(np.ceil(ccfg["refine_shift_frac"] * h + grow * h / 2)) + 1
+    my = int(np.ceil(ccfg["refine_shift_frac"] * h + max(grow, grow_y) * h / 2)) + 1
     height, width = shape
     return [max(0, x1 - mx), max(0, y1 - my), min(width, x2 + mx), min(height, y2 + my)]
 
 
 def align(rgb: np.ndarray, damage: np.ndarray, patch: np.ndarray, usable: np.ndarray,
           target_box: list[int], window: list[int], ccfg: dict) -> dict[str, Any]:
-    """Best (scale, dx, dy) by NCC on visible fragment pixels inside the target box."""
+    """Best (scale, aspect, dx, dy) by NCC on visible fragment pixels inside the target box."""
     wx1, wy1, wx2, wy2 = window
     x1, y1, x2, y2 = target_box
     in_box = np.zeros((wy2 - wy1, wx2 - wx1), dtype=bool)
@@ -197,30 +203,36 @@ def align(rgb: np.ndarray, damage: np.ndarray, patch: np.ndarray, usable: np.nda
     w, h = x2 - x1, y2 - y1
     sx, sy = int(round(ccfg["refine_shift_frac"] * w)), int(round(ccfg["refine_shift_frac"] * h))
     scales = [float(v) for v in ccfg["refine_scales"]]
+    aspects = [float(v) for v in ccfg["refine_aspects"]]
     minimum = int(ccfg["refine_min_visible_px"])
 
-    def score(scale: float, dx: int, dy: int) -> tuple[float, int]:
-        image, mask = warp(patch, usable, placement(target_box, scale, dx, dy), window)
+    def score(scale: float, dx: int, dy: int, aspect: float = 1.0) -> tuple[float, int]:
+        image, mask = warp(patch, usable, placement(target_box, scale, dx, dy, aspect), window)
         sel = visible & mask
         n = int(sel.sum())
         return (ncc(grey(image)[sel], target_grey[sel]) if n >= minimum else float("-inf")), n
 
     base, base_n = score(1.0, 0, 0)
-    result = {"scale": 1.0, "dx": 0, "dy": 0, "score_before": None if base == float("-inf") else round(base, 4),
+    result = {"scale": 1.0, "aspect": 1.0, "dx": 0, "dy": 0,
+              "score_before": None if base == float("-inf") else round(base, 4),
               "score": None, "visible_px": base_n, "searched": False,
-              "limits": {"dx": sx, "dy": sy, "scales": scales}, "on_bound": []}
+              "limits": {"dx": sx, "dy": sy, "scales": scales, "aspects": aspects}, "on_bound": []}
     if base == float("-inf"):
         result["note"] = f"fewer than refine_min_visible_px ({minimum}) visible pixels; not aligned"
         return result
-    best = (base, 1.0, 0, 0)
-    for scale in scales:
-        for dy in range(-sy, sy + 1):
-            for dx in range(-sx, sx + 1):
-                value, _ = score(float(scale), dx, dy)
-                # strictly better only: ties keep the unshifted placement
-                if value > best[0] + 1e-9:
-                    best = (value, float(scale), dx, dy)
-    result.update({"scale": best[1], "dx": best[2], "dy": best[3], "score": round(best[0], 4), "searched": True})
+    best = (base, 1.0, 0, 0, 1.0)
+    for aspect in aspects:
+        for scale in scales:
+            for dy in range(-sy, sy + 1):
+                for dx in range(-sx, sx + 1):
+                    value, _ = score(float(scale), dx, dy, aspect)
+                    # strictly better only: ties keep the unshifted placement
+                    if value > best[0] + 1e-9:
+                        best = (value, float(scale), dx, dy, aspect)
+    result.update({"scale": best[1], "dx": best[2], "dy": best[3], "aspect": best[4],
+                   "score": round(best[0], 4), "searched": True})
+    if len(set(aspects)) > 1 and best[4] in (min(aspects), max(aspects)):
+        result["on_bound"].append("aspect")
     # An optimum on the edge of the search means the true optimum probably lies outside it (T28).
     if len(set(scales)) > 1 and best[1] in (min(scales), max(scales)):
         result["on_bound"].append("scale")
@@ -308,10 +320,10 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
     if record["tier"] == "A":
         alignment = align(rgb, damage, patch, usable, target_box, window, ccfg)
     else:
-        alignment = {"scale": 1.0, "dx": 0, "dy": 0, "searched": False, "limits": None, "on_bound": [],
+        alignment = {"scale": 1.0, "aspect": 1.0, "dx": 0, "dy": 0, "searched": False, "limits": None, "on_bound": [],
                      "note": "tier B: no fragment to align to; placed at the implied box"}
-    image, mask = warp(patch, usable, placement(target_box, alignment["scale"], alignment["dx"], alignment["dy"]),
-                       window)
+    image, mask = warp(patch, usable, placement(target_box, alignment["scale"], alignment["dx"], alignment["dy"],
+                                                alignment.get("aspect", 1.0)), window)
     wx1, wy1, wx2, wy2 = window
     damage_w = damage[wy1:wy2, wx1:wx2] > 0
     colour_shift = [0.0, 0.0, 0.0]
@@ -340,7 +352,8 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
         painted = paint(out, labels, window, image, alpha, label)
     x1, y1, x2, y2 = target_box
     box_damage = int(damage[y1:y2, x1:x2].sum())
-    px, py, pw, ph = placement(target_box, alignment["scale"], alignment["dx"], alignment["dy"])
+    px, py, pw, ph = placement(target_box, alignment["scale"], alignment["dx"], alignment["dy"],
+                               alignment.get("aspect", 1.0))
     placed, used = int(mask.sum()), int(fill.sum())
     return {"alignment": alignment, "seam_agreement": seam, "seam_px": seam_px,
             "acceptance": {"accepted": accepted, "reasons": reasons, "painted": is_painted, **acceptance},
@@ -371,7 +384,7 @@ def target_panel(rgb: np.ndarray, damage: np.ndarray, result: np.ndarray, record
     cx1, cy1, cx2, cy2 = crop
     patch, usable = donor_patch(rgb, damage, donor_mask, record["donor_box"], bool(record["flipped"]))
     al = entry["alignment"]
-    donor, mask = warp(patch, usable, placement(box, al["scale"], al["dx"], al["dy"]), crop)
+    donor, mask = warp(patch, usable, placement(box, al["scale"], al["dx"], al["dy"], al.get("aspect", 1.0)), crop)
     donor = np.clip(donor.astype(np.float32) + np.asarray(entry["colour_shift"], np.float32), 0, 255).astype(np.uint8)
     photo = rgb[cy1:cy2, cx1:cx2]
     hole = damage[cy1:cy2, cx1:cx2] > 0
