@@ -781,7 +781,7 @@ and is `[1.0]`, i.e. off. With five values the mean fidelity of the 9 synthetic 
 0.49 (5 up, 2 down), `t_002` was not solved, and six of seven s01 placements changed (expert decisions
 stale). Cause of `t_002` found instead: the donor `arch_005` is seen at an angle and its right leg ends
 19 px above its box bottom (left 9 px; all other intact arches within 4 px); a scale cannot correct that.
-Open: R-004d. 175 tests.*
+Open: R-004d. 176 tests.*
 **Files.** `i2r/complete.py`, `i2r/render.py`, `config.yaml`, `tests/test_complete.py`.
 
 ---
