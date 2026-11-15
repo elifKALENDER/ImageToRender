@@ -13,7 +13,8 @@ Usage:
     python tools/mask_editor.py --image photo.jpg --out mask.png
     python tools/mask_editor.py --structure s02_test_arch --propose --no-gui   # write the proposal only
 
-Mouse: left button paints damage, right button erases, wheel changes the brush size.
+Mouse: left button paints damage, right button erases. Brush size: the slider under the picture, the
+wheel, or the keys + and - (also [ and ]). A circle shows the brush under the pointer.
 If the output file already exists, the window opens with it loaded (nothing is overwritten until
 "Save" is pressed).
 
@@ -37,6 +38,7 @@ from PIL import Image, ImageDraw, ImageFilter
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = REPO_ROOT / "config.yaml"
 
+BRUSH_MIN_PX, BRUSH_MAX_PX, BRUSH_STEP_PX = 2, 180, 3      # brush diameter on screen, and one wheel or key step
 NEAREST = Image.Resampling.NEAREST
 LANCZOS = Image.Resampling.LANCZOS
 
@@ -231,13 +233,13 @@ def edit_mask(
     root = tk.Tk()
     root.title(f"Damage mask: {photo_path.name}")
     root.configure(bg="#202020")
-    state = {"brush": max(4, int(round(settings.brush_px * scale))), "saved": False,
+    state = {"brush": max(4, int(round(settings.brush_px * scale))), "saved": False, "pointer": None,
              "painting": False, "erasing": False}
 
     tk.Label(
         root,
         text=("Red = damaged or missing, to be completed. Left button paints, right button erases, "
-              "wheel changes the brush. Do not paint real door, window or arch openings."),
+              "slider, wheel or + / - change the brush. Do not paint real door, window or arch openings."),
         fg="white", bg="#202020", font=("Segoe UI", 10), wraplength=max(520, dw), justify="left",
     ).pack(fill="x", padx=10, pady=(10, 6))
     canvas = tk.Canvas(root, width=dw, height=dh, highlightthickness=0, bg="black")
@@ -250,7 +252,7 @@ def edit_mask(
         brush = max(1, int(round(state["brush"] / max(scale, 1e-6))))
         area = mask_area_ratio(display_mask) * 100
         status_var.set(f"Brush: about {brush}px | marked: {area:.1f} % of the image | "
-                       "Left: add | Right: erase | Wheel: size")
+                       "Left: add | Right: erase | Slider, wheel, + / -: size")
 
     def redraw() -> None:
         red = Image.new("RGBA", (dw, dh), (255, 36, 36, 0))
@@ -259,6 +261,26 @@ def edit_mask(
         holder["image"] = ImageTk.PhotoImage(shown)
         canvas.delete("all")
         canvas.create_image(0, 0, anchor="nw", image=holder["image"])
+        ring()
+
+    def ring() -> None:
+        """Outline of the brush at the pointer, so its size is seen before painting."""
+        canvas.delete("ring")
+        if state.get("pointer"):
+            x, y = state["pointer"]
+            r = state["brush"] / 2
+            canvas.create_oval(x - r, y - r, x + r, y + r, outline="#ffffff", width=1, tags="ring")
+
+    def hover(event) -> None:
+        state["pointer"] = (event.x, event.y)
+        ring()
+
+    def set_brush(value: float) -> None:
+        state["brush"] = int(max(BRUSH_MIN_PX, min(BRUSH_MAX_PX, round(float(value)))))
+        if int(slider.get()) != state["brush"]:
+            slider.set(state["brush"])
+        ring()
+        update_status()
 
     def paint_at(x: int, y: int, value: int) -> None:
         r = state["brush"] / 2
@@ -273,6 +295,7 @@ def edit_mask(
 
     def move(value: int, key: str):
         def handler(event) -> None:
+            state["pointer"] = (event.x, event.y)
             if state[key]:
                 paint_at(event.x, event.y, value)
         return handler
@@ -284,8 +307,7 @@ def edit_mask(
         return handler
 
     def wheel(event) -> None:
-        state["brush"] = max(4, min(180, state["brush"] + (3 if event.delta > 0 else -3)))
-        update_status()
+        set_brush(state["brush"] + (BRUSH_STEP_PX if event.delta > 0 else -BRUSH_STEP_PX))
 
     def clear() -> None:
         display_mask.paste(0, (0, 0, dw, dh))
@@ -307,7 +329,20 @@ def edit_mask(
     canvas.bind("<ButtonPress-3>", press(0, "erasing"))
     canvas.bind("<B3-Motion>", move(0, "erasing"))
     canvas.bind("<ButtonRelease-3>", release("erasing"))
-    canvas.bind("<MouseWheel>", wheel)
+    canvas.bind("<Motion>", hover)
+    root.bind_all("<MouseWheel>", wheel)                 # on the window: the canvas rarely has the focus
+    for keys, step in ((("<plus>", "<KP_Add>", "<equal>", "<bracketright>"), BRUSH_STEP_PX),
+                       (("<minus>", "<KP_Subtract>", "<bracketleft>"), -BRUSH_STEP_PX)):
+        for key in keys:
+            root.bind(key, lambda _e, step=step: set_brush(state["brush"] + step))
+
+    size_row = tk.Frame(root, bg="#202020")
+    size_row.pack(fill="x", padx=10)
+    tk.Label(size_row, text="Brush size", fg="white", bg="#202020").pack(side="left")
+    slider = tk.Scale(size_row, from_=BRUSH_MIN_PX, to=BRUSH_MAX_PX, orient="horizontal", showvalue=False,
+                      command=set_brush, bg="#202020", fg="white", highlightthickness=0, troughcolor="#505050")
+    slider.set(state["brush"])
+    slider.pack(side="left", fill="x", expand=True, padx=(8, 0))
 
     buttons = tk.Frame(root, bg="#202020")
     buttons.pack(fill="x", padx=10, pady=(4, 10))
