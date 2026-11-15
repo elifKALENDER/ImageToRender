@@ -1,0 +1,7 @@
+# Settings that differ from config.yaml for this building only.
+detect:
+  # The supports of the blind arcades are engaged colonnettes (attached to the wall), as on s01, and the
+  # detector labels such supports "column"; every "column" detection is treated as a pilaster. Taken over
+  # from s01 (RND-001) because the element type is the same; not measured on this photograph.
+  class_merge:
+    column: pilaster

@@ -12,7 +12,7 @@
 |---|---|
 | Date | 2026-11-14 |
 | Branch | `fix/failure-analysis`, ahead of `main` (`v0.1.0`); not merged, which is the author's decision |
-| Structures | **n = 1 building** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only so far |
+| Structures | **n = 1 building with results** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only. `s04_ani_redeemer` (added 2026-11-15) is a **second building** with a known licence (CC BY-SA 2.0), 1501 x 1956: detection only so far, it waits for the author's damage mask and inventory |
 | Reference run | `outputs/s01_test_church/20261114_170229` (generative fill off, the author's decisions applied). Open `report.html` in it |
 | Tests | 187 pass (`python -m unittest discover tests`, no GPU) |
 
@@ -167,6 +167,17 @@ Ordered by how much they limit a presentable result.
 ### P10. Everything is measured on one building
 - **What.** Thresholds were chosen and are reported on s01. `s03_church_later` is the same building.
 - **Effect.** No number here says how the method does elsewhere.
+- **Started.** `s04_ani_redeemer` (Church of the Holy Redeemer, Ani; Wikimedia Commons, CC BY-SA 2.0; see
+  its `SOURCE.md`) is set up as a second building. One bay of its lower blind arcade is broken out with
+  intact bays on both sides. Raw detection (run `outputs/s04_ani_redeemer/20261115_114047`): 38 elements,
+  every score at or below 0.02, boxes covering whole wall panels, as on s01 and s03. No code, threshold or
+  setting was changed for it except the `column` to `pilaster` merge taken over from s01.
+- **Needs the author.** The damage mask and the inventory of s04:
+
+  ```
+  python tools/mask_editor.py --structure s04_ani_redeemer
+  python tools/editor_adapter.py edit --run outputs/s04_ani_redeemer/20261115_114047
+  ```
 
 ### Smaller points
 - The label "outside facade" is drawn only where it fits in the region; on s01 it does not, the legend
