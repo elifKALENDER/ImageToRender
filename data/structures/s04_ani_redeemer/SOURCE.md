@@ -36,7 +36,7 @@ assistant's (reasons below), the author left it open.
 | `source_Church_of_the_Holy_Redeemer_-_Ani_Ruins.jpg` | No | The file as downloaded (SHA-256 starts `af0e5192789e01bc`). |
 | `image.png` | No | The crop named above. Not tracked by default; the licence would allow it with attribution, which is the author's decision. |
 | `structure.yaml` | Yes | The `column` to `pilaster` merge of s01, same element type. |
-| `damage_mask.png` | n/a | **Not drawn yet** (author). Without it only the detect and review steps run. |
+| `damage_mask.png` | No | **Draft by the assistant (2026-11-15), not reviewed by the author.** Made by a colour rule inside a hand-set rectangle round the breach (x 850-1230, y 1230-1840): pixels of low saturation and high brightness (HSV S < 55, V > 115: the grey rubble core against the red facing stone) or very dark (V < 38: holes), opened 5 px, closed 21 px, components of 2,500 px or more; 95,420 px, 3.3 % of the image. Known faults: a strip of shadow left of the standing colonnette is marked, small unmarked spots lie inside the breach, the broken cornice above is not marked. To be corrected in `tools/mask_editor.py` (it opens with this file loaded). Results made with the uncorrected draft are not results. |
 
 ## The other photographs in `data/incoming/` (not processed)
 
@@ -50,6 +50,6 @@ assistant's (reasons below), the author left it open.
 
 ## Open actions (author)
 
-- Draw `damage_mask.png` with `tools/mask_editor.py`.
+- Correct the draft `damage_mask.png` with `tools/mask_editor.py --structure s04_ani_redeemer` and save it.
 - Correct the element inventory in the editor.
 - Decide whether `image.png` is committed (the licence allows it with attribution).
