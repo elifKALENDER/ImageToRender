@@ -46,6 +46,16 @@ support, never a restoration decision. The owner is an architect and writes in T
 ## Resume here (written 2026-11-15, end of session)
 Branch `fix/failure-analysis`, everything pushed, 187 tests. Start by reading `docs/STATUS.md`, then this list.
 
+**The author's last remark before closing (2026-11-15), the first thing to take up:** the analyses are
+good, but no restoration product comes out: the placements are not really made. Checked on s04
+(`first_construction_completed.png` of run `20261115_132443`): only the arch field and one colonnette are
+pasted; the wall under the arch and the rest of the breach stay rubble, and the restoration view is empty
+because every placement is a withheld guess. Two causes: (1) plain wall is not an element, so nothing can
+fill it (tier C, "no evidence"), although an intact bay stands next to the broken one; (2) guesses are
+withheld until the expert approves. Proposed next task, not started and not yet agreed: a **bay donor**
+(copy the whole neighbouring bay, wall, arch and colonnettes together, into the broken bay, as a marked
+guess), and one image that shows the full proposal without hatching beside the marked one.
+
 **Waiting for the author's answer (asked, not answered):**
 1. s04 mask, the band along the left side of the building (59 % of mask v1 lies outside the building's
    silhouette; the pipeline hatches it "outside facade" and fills nothing). Either (a) take the band out of
