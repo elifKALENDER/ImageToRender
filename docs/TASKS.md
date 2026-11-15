@@ -15,7 +15,7 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
-- **After v0.1.0: T26 and T28 to T37 are done (2026-11-15). T27: the mechanism is done, but point 5 of the
+- **After v0.1.0: T26 and T28 to T38 are done (2026-11-15). T27: the mechanism is done, but point 5 of the
   failure analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`).
   Phase 3 has no open coding task; what is open is the author's manual input (see `docs/STATUS.md`).** Author decision
   2026-11-12: no second structure and no other photograph in this stage; s02 is dropped and T22-T23 are
@@ -801,12 +801,25 @@ and below `arch_005` for the arch, so the reference run is byte-identical. Named
 `t_002` 0.80 with seam 0.59. Seen in the panels: the patches are blurred (the reference photograph has
 about half the resolution of s01) and rectangular (the whole box is pasted, wall included); the arch
 does reach both capitals. **Not usable as a result with this photograph**; the mechanism needs a larger
-reference photograph and, for narrow elements, a mask instead of the box (R-037a). 186 tests.*
+reference photograph and, for narrow elements, a mask instead of the box (R-037a, done as T38). 186 tests.*
 **What.** P1 of `docs/STATUS.md`: most damage has no evidence on the photograph itself.
 **Files.** `i2r/references.py`, `i2r/evidence.py`, `i2r/complete.py`, `i2r/render.py`, `i2r/report.py`,
 `tools/reference_donors.py`, `tools/target_review.py`, `config.yaml`, `tests/test_references.py`.
 **Accept.** A boxed element of another photograph can be placed as a marked guess and is recorded with
 its photograph; without the expert's choice or a similarity above the threshold nothing changes.
+
+### T38. Mask instead of the box for a reference donor (added 2026-11-15; was R-037a)
+*Status: done 2026-11-15. `python tools/reference_donors.py --structure <id> --masks` makes a SAM mask
+per box (prompted with the box, clipped to it, kept when it fills at least `refine_masks.min_fill` of
+it); stored in `references/masks/` (local) and named in `reference_donors.json` with the box it was made
+for; a redrawn box falls back to the box until `--masks` is run again. s01 trial (the two boxes of T37,
+run `20261115_111849`, not a result): base mask fills 0.87 of its box, arch mask 0.49. **The arch mask is
+the wrong object:** at this resolution SAM returned the wall field under the arch, not the arch moulding,
+so the placement pastes a half-round panel. Its alignment score (0.82) and seam (0.84) are nevertheless
+the highest `t_002` has had: one more case where the two tests do not see what the eye sees (RND-004).
+The base is unchanged (score 0.23). A mask has to be looked at before it is trusted; drawing it by hand
+is not implemented. 187 tests.*
+**Files.** `tools/reference_donors.py`, `i2r/references.py`, `i2r/complete.py`, `tests/test_references.py`.
 
 ---
 

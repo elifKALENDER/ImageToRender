@@ -16,12 +16,15 @@ Usage:
     python tools/reference_donors.py --structure <id> --list
     python tools/reference_donors.py --structure <id> --name other_side --add base 120 600 190 650 [--note "..."]
     python tools/reference_donors.py --structure <id> --remove base_01
+    python tools/reference_donors.py --structure <id> --masks        # SAM mask per box (GPU), instead of the box
 Then:
     python run.py --structure <id> --from evidence --no-review
 
-Window: choose the class, drag a rectangle around one intact element (tight: the whole box is copied, a
-reference donor has no mask). Right click on a box removes it. Closing the window saves.
-No torch is imported.
+Window: choose the class, drag a rectangle around one intact element. Right click on a box removes it.
+Closing the window saves. Without ``--masks`` the whole box is copied (wall included); with it only the
+element SAM finds in the box, when that fills at least ``refine_masks.min_fill`` of the box. A mask
+belongs to the box it was made for: after redrawing a box run ``--masks`` again.
+torch is imported only for ``--masks``.
 """
 from __future__ import annotations
 
@@ -100,10 +103,49 @@ def remove_donor(doc: dict[str, Any], donor_id: str) -> None:
     doc["donors"] = [d for d in doc["donors"] if d["id"] != donor_id]
 
 
+def make_masks(structure_dir: Path, doc: dict[str, Any], cfg: dict[str, Any]) -> list[str]:
+    """SAM mask (prompted with the box, clipped to it) for every donor; returns one line per donor."""
+    import logging
+
+    import numpy as np
+    import torch
+
+    from i2r.detect import segment_sam
+
+    log = logging.getLogger("reference_donors")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    fp16 = device == "cuda" and bool(cfg["detect"]["use_fp16_if_cuda"])
+    min_fill = float(cfg["refine_masks"]["min_fill"])
+    folder = structure_dir / PHOTO_DIR / "masks"
+    folder.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for name in doc["photos"]:
+        donors = [d for d in doc["donors"] if d["photo"] == name]
+        if not donors:
+            continue
+        image = Image.open(photo_path(structure_dir, doc, name)).convert("RGB")
+        masks = segment_sam(image, [d["box"] for d in donors], cfg["detect"], device, fp16, log)
+        for d, mask in zip(donors, masks):
+            x1, y1, x2, y2 = d["box"]
+            clipped = np.zeros(mask.shape, np.uint8)
+            clipped[y1:y2, x1:x2] = mask[y1:y2, x1:x2] > 0
+            fill = float(clipped[y1:y2, x1:x2].mean())
+            if fill >= min_fill:
+                Image.fromarray(clipped * 255, mode="L").save(folder / f"{d['id']}.png")
+                d["mask_file"], d["mask_box"] = f"{PHOTO_DIR}/masks/{d['id']}.png", list(d["box"])
+                lines.append(f"{d['id']}: SAM mask kept, fills {fill:.2f} of the box")
+            else:
+                d.pop("mask_file", None)
+                d.pop("mask_box", None)
+                lines.append(f"{d['id']}: box kept, the SAM mask fills only {fill:.2f} of it (min_fill {min_fill:.2f})")
+    return lines
+
+
 def table(doc: dict[str, Any]) -> str:
     rows = [f"photo {name}: {p['file']}" + (f"  ({p['note']})" if p.get("note") else "") for name, p in doc["photos"].items()]
-    rows += [f"  {d['id']:16s} {d['class']:10s} {d['photo']:14s} {d['box']}" + (f"  {d['note']}" if d.get("note") else "")
-             for d in doc["donors"]]
+    rows += [f"  {d['id']:16s} {d['class']:10s} {d['photo']:14s} {d['box']}  "
+             + ("mask" if d.get("mask_file") and d.get("mask_box") == d["box"] else "box ")
+             + (f"  {d['note']}" if d.get("note") else "") for d in doc["donors"]]
     return "\n".join(rows) if rows else "no reference donors"
 
 
@@ -190,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--add", nargs=5, metavar=("CLASS", "X1", "Y1", "X2", "Y2"), help="add one box, no window")
     parser.add_argument("--remove", nargs="+", default=[], metavar="ID")
+    parser.add_argument("--masks", action="store_true", help="make a SAM mask for every box (GPU)")
     parser.add_argument("--config", default=str(runio.DEFAULT_CONFIG))
     opts = parser.parse_args(argv)
     try:
@@ -207,11 +250,13 @@ def main(argv: list[str] | None = None) -> int:
             if not opts.name:
                 raise ContractError("--add needs --name (the photo the box is on)")
             add_donor(structure_dir, doc, opts.name, opts.add[0], [int(v) for v in opts.add[1:]], classes, opts.note)
-        if not (opts.list or opts.add or opts.remove):
+        if opts.masks:
+            print("\n".join(make_masks(structure_dir, doc, cfg)))
+        if not (opts.list or opts.add or opts.remove or opts.masks):
             if not opts.name:
                 raise ContractError("give --name (and --photo the first time), or --list")
             window(structure_dir, doc, opts.name, classes)
-        if opts.photo or opts.add or opts.remove or not opts.list:
+        if opts.photo or opts.add or opts.remove or opts.masks or not opts.list:
             save(structure_dir, doc)
         print(table(doc))
         print(f"\nFile: {runio.relative(structure_dir / REFERENCE_FILE)}")

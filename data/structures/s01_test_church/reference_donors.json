@@ -19,7 +19,14 @@
         468,
         650
       ],
-      "note": "trial box drawn by the assistant from a gridded crop, not by the expert; redraw or remove"
+      "note": "trial box drawn by the assistant from a gridded crop, not by the expert; redraw or remove",
+      "mask_file": "references/masks/base_01.png",
+      "mask_box": [
+        372,
+        588,
+        468,
+        650
+      ]
     },
     {
       "id": "arch_01",
@@ -31,7 +38,14 @@
         292,
         452
       ],
-      "note": "trial box drawn by the assistant from a gridded crop, not by the expert; redraw or remove"
+      "note": "trial box drawn by the assistant from a gridded crop, not by the expert; redraw or remove",
+      "mask_file": "references/masks/arch_01.png",
+      "mask_box": [
+        226,
+        405,
+        292,
+        452
+      ]
     }
   ]
 }

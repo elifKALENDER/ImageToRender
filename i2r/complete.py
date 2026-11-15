@@ -712,9 +712,14 @@ def load_donor_masks(run: "Run", elements: list[dict], records: list[dict], size
                      donor_images: dict[str, np.ndarray] | None = None) -> dict[str, np.ndarray]:
     by_id = {e["id"]: e for e in elements}
     masks = {}
+    ref_masks = references.load_masks(run.run_dir) if donor_images else {}
     for donor_id in {r["donor_id"] for r in records if r.get("donor_id")}:
-        if donor_id in (donor_images or {}):               # reference donor: its mask is its box
-            masks[donor_id] = np.ones(donor_images[donor_id].shape[:2], np.uint8)
+        if donor_id in (donor_images or {}):               # reference donor: its SAM mask, else its box
+            shape = donor_images[donor_id].shape[:2]
+            mask = ref_masks.get(donor_id)
+            if mask is not None and mask.shape != shape:
+                raise ContractError(f"mask of reference donor {donor_id} differs in size from its photograph")
+            masks[donor_id] = mask if mask is not None else np.ones(shape, np.uint8)
             continue
         if donor_id not in by_id:
             raise ContractError(f"evidence.json names donor {donor_id!r}, which is not in elements.json")

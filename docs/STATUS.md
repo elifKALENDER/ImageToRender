@@ -14,7 +14,7 @@
 | Branch | `fix/failure-analysis`, ahead of `main` (`v0.1.0`); not merged, which is the author's decision |
 | Structures | **n = 1 building** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only so far |
 | Reference run | `outputs/s01_test_church/20261114_170229` (generative fill off, the author's decisions applied). Open `report.html` in it |
-| Tests | 186 pass (`python -m unittest discover tests`, no GPU) |
+| Tests | 187 pass (`python -m unittest discover tests`, no GPU) |
 
 Statements marked **(guess)** are the assistant's reading, not a measurement.
 
@@ -224,6 +224,7 @@ then name them for a target in the review window (they are also taken automatica
 
 ```
 python tools/reference_donors.py --structure s01_test_church --name <short name> --photo <image file>
+python tools/reference_donors.py --structure s01_test_church --masks
 python run.py --structure s01_test_church --from evidence --no-review
 python tools/target_review.py --run outputs/s01_test_church/<newest run>
 ```
@@ -240,7 +241,7 @@ items below to build next.
 | ID | What | Why it is open |
 |---|---|---|
 | R-004d | donor seen at another angle than the target (`t_002`): shear term or cross-photo donor | P6; a vertical scale did not help (T36) |
-| R-037a | reference donors: element mask instead of the box; a larger reference photograph | P1; T37 trial |
+| R-038a | reference donors: a larger reference photograph; a way to check or draw the mask (SAM took the wall under the arch on the 567 px photo) | P1; T37, T38 trials |
 | B3 | paired-rhythm (bay) rule | P7 |
 | R-004a to c | seam and score thresholds on more data | P2 |
 | T27 rest | point 5 with the author's facade mask | P4; waits for step 2 |

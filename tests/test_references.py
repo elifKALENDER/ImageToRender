@@ -117,6 +117,30 @@ class FileAndToolTest(unittest.TestCase):
         self.assertEqual(references.copy_into_run(self.run.structure_dir, self.run.run_dir, CLASSES), 0)
         self.assertEqual(references.load_from_run(self.run.run_dir), ([], {}))             # stale copy removed
 
+    def test_a_mask_is_used_only_for_the_box_it_was_made_for(self) -> None:
+        self.add()
+        sdir = self.run.structure_dir
+        (sdir / "references" / "masks").mkdir()
+        mask = np.zeros((80, 60), np.uint8)
+        mask[15:45, 12:28] = 255
+        Image.fromarray(mask, mode="L").save(sdir / "references" / "masks" / "pilaster_01.png")
+        path = sdir / references.REFERENCE_FILE
+        doc = read_json(path)
+        doc["donors"][0].update({"mask_file": "references/masks/pilaster_01.png", "mask_box": [10, 10, 30, 50]})
+        write_json(path, doc)
+        references.copy_into_run(sdir, self.run.run_dir, CLASSES)
+        masks = references.load_masks(self.run.run_dir)
+        self.assertEqual(int(masks["ref:pilaster_01"].sum()), 30 * 16)
+        self.assertEqual(references.load_from_run(self.run.run_dir)[0][0]["mask_kind"], "sam_from_box")
+        loaded = complete.load_donor_masks(self.run, [], [{"donor_id": "ref:pilaster_01"}], (0, 0),
+                                           references.load_from_run(self.run.run_dir)[1])
+        self.assertEqual(int(loaded["ref:pilaster_01"].sum()), 30 * 16)
+        doc["donors"][0]["box"] = [10, 10, 32, 50]                       # redrawn: the mask is stale
+        write_json(path, doc)
+        references.copy_into_run(sdir, self.run.run_dir, CLASSES)
+        self.assertEqual(references.load_masks(self.run.run_dir), {})
+        self.assertEqual(references.load_from_run(self.run.run_dir)[0][0]["mask_kind"], "box")
+
     def test_a_box_outside_the_photo_or_a_bad_file_is_refused(self) -> None:
         path = self.run.structure_dir / references.REFERENCE_FILE
         write_json(path, {"photos": {"other": {"file": "x.png"}},

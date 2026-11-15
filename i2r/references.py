@@ -13,7 +13,8 @@ such elements with ``tools/reference_donors.py``; they are stored in the buildin
 
 In the pipeline a reference donor is one more intact element, with these differences:
 
-- its ID is ``ref:<id>``; its mask is its box (no SAM mask);
+- its ID is ``ref:<id>``; its mask is its box, or a SAM mask made from the box by
+  ``tools/reference_donors.py --masks`` (``mask_file``, valid only for the box it was made for);
 - sizes on two photographs are not comparable, so the size filter compares proportions only;
 - it is used only when no donor of the same photograph qualifies (``evidence.find_tier_a``);
 - a placement from it is a guess for the expert, never an automatic completion
@@ -85,8 +86,39 @@ def copy_into_run(structure_dir: Path, run_dir: Path, classes: list[str] | None 
         with Image.open(source) as image:
             image.convert("RGB").save(target / f"{name}.png")
         photos[name] = {**photo, "file": f"{name}.png", "source_file": photo["file"]}
-    write_json(target / REFERENCE_FILE, {"photos": photos, "donors": doc["donors"]})
-    return len(doc["donors"])
+    donors = []
+    for d in doc["donors"]:
+        d = dict(d)
+        mask = structure_dir / d["mask_file"] if mask_is_current(d) else None
+        if mask is not None and mask.is_file():
+            shutil.copy2(mask, target / f"mask_{d['id']}.png")
+            d["mask_file"] = f"mask_{d['id']}.png"
+        else:
+            d.pop("mask_file", None)                       # none, or made for another box: the box is the mask
+            d.pop("mask_box", None)
+        donors.append(d)
+    write_json(target / REFERENCE_FILE, {"photos": photos, "donors": donors})
+    return len(donors)
+
+
+def mask_is_current(donor: dict[str, Any]) -> bool:
+    """A donor's mask counts only while its box is the one the mask was made for."""
+    return bool(donor.get("mask_file")) and donor.get("mask_box") == donor["box"]
+
+
+def load_masks(run_dir: Path) -> dict[str, np.ndarray]:
+    """{donor ID: 0/1 mask of its photograph's size} for the reference donors of the run that have one."""
+    folder = run_dir / RUN_DIR
+    if not (folder / REFERENCE_FILE).is_file():
+        return {}
+    masks = {}
+    for d in read_reference_file(folder / REFERENCE_FILE)["donors"]:
+        if d.get("mask_file"):
+            path = folder / d["mask_file"]
+            if not path.is_file():
+                raise ContractError(f"Mask of reference donor {d['id']} not found in the run folder: {path}")
+            masks[PREFIX + d["id"]] = (np.asarray(Image.open(path).convert("L")) >= 128).astype(np.uint8)
+    return masks
 
 
 def load_from_run(run_dir: Path) -> tuple[list[dict[str, Any]], dict[str, np.ndarray]]:
@@ -110,7 +142,8 @@ def load_from_run(run_dir: Path) -> tuple[list[dict[str, Any]], dict[str, np.nda
                                 f"({rgb.shape[1]} x {rgb.shape[0]})")
         donor_id = PREFIX + d["id"]
         donors.append({"id": donor_id, "class": d["class"], "box": d["box"], "damage_status": "intact",
-                       "source": "reference", "reference_photo": d["photo"], "note": d.get("note", "")})
+                       "source": "reference", "reference_photo": d["photo"], "note": d.get("note", ""),
+                       "mask_kind": "sam_from_box" if d.get("mask_file") else "box"})
         images[donor_id] = rgb
     return donors, images
 
