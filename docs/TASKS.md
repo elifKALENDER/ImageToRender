@@ -843,6 +843,50 @@ result is no longer a run of the unchanged pipeline.** s01 (run `20261116_091352
 byte-identical; one bay guess (`arch_004` from `arch_007`, across the apse, score 0.31, 3,945 px);
 21 targets (7 A, 1 B, 13 C); first-construction 10,029 px. The bay alignment search takes about 2 minutes
 per bay on s04 (same search as tier A on a large box). No bay has been judged by the author. 194 tests.*
+
+*T39b, 2026-11-16 (asked by the author: the strip at the right edge, the flat look; not committed unless
+the log shows it). (1) The bay box is widened to the outer edges of the intact supports under the arch
+(`evidence.bay_extent`); the target gets the donor's overhangs scaled by the two arch widths. (2) A bay
+copy is colour-matched by a gain per channel within `complete.bay_gain_limits` ([0.67, 1.5], chosen by
+eye on s04), then a shift for the rest (`complete.bay_match_gain`); a shift alone lifted the dark joints
+of the shadowed donor bay, an unlimited gain (2.0) burnt out the lichen patch. Other placements keep the
+plain shift. s04 run `20261116_125015`: bay of `draft_arch_05` 107,764 px (was 99,403; score 0.46), of
+`draft_arch_04` 15,096 px (0.45); first-construction view 126,138 px; both colonnettes of the copied bay
+are now in the picture and the joints read. Still open: a sliver about 10 px wide at the right edge
+(4,234 damage px of the bay box unfilled; the alignment shrinks the copy to scale 0.94, the search bound).
+s01 run `20261116_125653`: restoration image byte-identical; bay guess 3,347 px (score 0.29);
+first-construction 9,337 px. Whether the look is better is the assistant's reading of one crop, not a
+measurement. 195 tests.*
+
+*T39c, 2026-11-16 (the author on the T39b picture: better, but the copy does not fit; the arch on the right
+must share the same colonnette with it). Cause: the free alignment search shrank the copy to scale 0.94,
+so its right colonnette stood 12 px left of the foot of the neighbouring arch. Now a bay is anchored on
+the points where its arch meets its row neighbours (`evidence.bay_anchors`: half-way between the facing
+box edges); the target box is built so that the box-to-box copy puts the donor's anchors on the target's,
+and the complete step searches only the vertical shift for a bay (`align(..., vertical_only=True)`), no
+scale and no horizontal shift. s04 run `20261116_130719`: bay of `draft_arch_05` 110,758 px (dy -11,
+NCC 0.39), of `draft_arch_04` 14,545 px (dy -2, 0.29); no damage pixel of either bay box left unfilled,
+the sliver at the right edge is closed; first-construction view 128,581 px. The copied right colonnette
+now stands under the junction of `draft_arch_05` and `draft_arch_06`. The NCC is lower than with the free
+search (0.46): the placement follows the inventory's arch boxes, which here are the assistant's draft, so
+it is as good as those boxes. The bay step now takes seconds instead of minutes. s01 run `20261116_130853`:
+restoration image byte-identical; bay guess 3,891 px (NCC 0.21); first-construction 9,670 px.
+Not judged by the author yet. 196 tests.*
+
+*T39d, 2026-11-16 (the author on the T39c picture: still bad, the end of the neighbouring arch does not
+reach the colonnette). Seen in an enlargement: the bay box ended at the support's outer edge, so a dark
+slit of damage stayed beside the copied capital and the broken foot of the neighbouring arch was not
+completed. Now the bay box reaches `evidence.tier_b.bay_side_margin` (0.15, chosen by eye on s04) of the
+span beyond each anchor, so the copy carries the whole shared support and the feet of the two
+neighbouring arches where those are damaged. **Checked only in a preview, not in a pipeline run:** on
+this day Windows Application Control began to block `torch/lib/shm.dll` (WinError 4551), so the evidence
+step (DINOv2) cannot run. The preview recomputed only the bay records with the current code, kept the
+other records of run `20261116_130719`, and ran `complete.complete_view`:
+`outputs/s04_ani_redeemer/preview_T39d.png` (photograph | proposal, local). In it the bay of
+`draft_arch_05` is 116,576 px and of `draft_arch_04` 11,047 px, first-construction 130,901 px, the capital
+is whole and both arches land on it. s01 was not checked with the margin. To do when torch loads again:
+`python run.py --structure s04_ani_redeemer --from evidence --view both --no-review`, the same for s01.
+197 tests (GPU-free, pass).*
 **Files.** `i2r/evidence.py`, `i2r/complete.py`, `i2r/render.py`, `i2r/report.py`, `config.yaml`,
 `data/structures/s04_ani_redeemer/structure.yaml`, `tests/test_evidence_b.py`, `tests/test_complete.py`,
 `tests/test_render.py`.

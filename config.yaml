@@ -222,11 +222,16 @@ evidence:
     # Always a guess (first-construction view and proposal.png only, never the restoration view).
     bays_enabled: true
     bay_arch_class: arch
-    bay_support_classes: [pilaster, column]   # the bay ends at the bottom of the intact supports under the arch
+    # The bay reaches the outer edges and the bottom of the intact supports under the arch.
+    bay_support_classes: [pilaster, column]
     # A bay whose box is damaged by at most this share is a donor; above it, a target.
     bay_donor_max_damage: 0.05      # initial guess, not calibrated
     # Donor and target arch must agree in width and height within 1 +/- this (as evidence.size_tolerance).
     bay_size_tolerance: 0.35        # initial guess, not calibrated
+    # The bay box reaches this share of the bay's span beyond each end (at least to the supports' outer
+    # edges): the feet of the two neighbouring arches stand on the same supports, and where they are
+    # damaged the copy has to carry them too (T39d).
+    bay_side_margin: 0.15           # initial guess, chosen by eye on s04 (n = 1)
     # The bay starts this many arch heights above the arch box (the wall up to the cornice). 0 = at the
     # arch. Set it per building in data/structures/<id>/structure.yaml.
     bay_top_extension: 0.0
@@ -248,6 +253,11 @@ complete:
   refine_min_visible_px: 50
   # Shift the donor's mean colour to the fragment's visible part (lighting differs across a facade).
   match_colour: true
+  # A bay copy (B3) is matched first by a gain per colour channel (ratio of the means), then by a shift
+  # for what the gain limits leave: the donor bay often stands in other light, and a shift alone lifts
+  # its dark joints (flat look), while an unlimited gain burns out light patches (s04: gain 2.0, T39b).
+  bay_match_gain: true
+  bay_gain_limits: [0.67, 1.5]      # chosen by eye on s04 (n = 1), not calibrated
   # Alpha ramps from 0 at the damage-mask edge to 1 this many pixels inside it; outside it stays 0.
   feather_px: 2
   # Acceptance of a tier A placement (T28, docs/rnd/RND-004-alignment-acceptance.md). A placement that

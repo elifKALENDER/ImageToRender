@@ -44,14 +44,20 @@ support, never a restoration decision. The owner is an architect and writes in T
 - Re-run: `python run.py --structure s01_test_church --from damage --view both --no-review`.
 
 ## Resume here (written 2026-11-15, end of session; T39 added 2026-11-16)
-Branch `fix/failure-analysis`, 194 tests. Start by reading `docs/STATUS.md`, then this list.
+Branch `fix/failure-analysis`, 197 tests. Start by reading `docs/STATUS.md`, then this list.
 
-**T39 done 2026-11-16 (bay donor B3 + `proposal.png`; uncommitted unless the git log shows it; status note
-in `docs/TASKS.md`).** s04 run `outputs/s04_ani_redeemer/20261116_091340`: the breach is filled in the
-first-construction view by a copy of the neighbouring bay (two bay guesses, 117,248 px, scores 0.45 / 0.41),
-restoration view still empty by rule. s01 run `20261116_091352`: restoration byte-identical, one bay guess.
-Waiting for the author's judgement of `proposal.png`. Known flaws: strip open at the right edge of the
-breach, flat look of the copy, about 2 minutes of alignment per bay. The paragraph below is the remark
+**T39 done 2026-11-16 (bay donor B3 + `proposal.png`, commit `7d59b36`, pushed) and T39b, T39c the same day (bay
+widened to its supports, gain colour match, bay anchored where its arch meets the neighbours so the
+colonnette is shared, vertical search only; uncommitted unless the git log shows it; status notes in
+`docs/TASKS.md`).** s04 run `outputs/s04_ani_redeemer/20261116_130719`: the breach is filled in the
+first-construction view by a copy of the neighbouring bay (two bay guesses, 125,303 px), restoration view
+still empty by rule. s01 run `20261116_130853`: restoration byte-identical, one bay guess.
+The bay placement follows the arch boxes of the inventory (on s04 the assistant's draft).
+**T39d (bay box reaches `bay_side_margin` beyond each anchor: whole shared support and the neighbouring
+arch feet) is coded and tested but seen only in a preview**, `outputs/s04_ani_redeemer/preview_T39d.png`:
+on 2026-11-16 Windows Application Control began to block `torch/lib/shm.dll` (WinError 4551), so the
+evidence step cannot run. Do not work around the policy; the author has to allow it. Then re-run s04 and
+s01 `--from evidence` and update the figures in `docs/TASKS.md` (T39d) and `docs/STATUS.md`. The paragraph below is the remark
 that led to T39.
 
 **The author's last remark before closing (2026-11-15), the first thing to take up:** the analyses are

@@ -235,8 +235,8 @@ class TierB3BayTest(unittest.TestCase):
     """B3: a damaged bay takes the nearest intact bay of its arch row as donor, wall included."""
 
     def bays(self, elements: list[dict], damage: np.ndarray, **overrides) -> tuple[list[dict], dict]:
-        targets, diag = evidence.find_tier_b(elements, damage, bcfg(rows_enabled=False, symmetry_enabled=False,
-                                                                    **overrides))
+        settings = {"rows_enabled": False, "symmetry_enabled": False, "bay_side_margin": 0.0, **overrides}
+        targets, diag = evidence.find_tier_b(elements, damage, bcfg(**settings))
         return targets, diag["B3"]
 
     def test_damaged_bay_gets_the_whole_neighbouring_bay(self) -> None:
@@ -245,16 +245,35 @@ class TierB3BayTest(unittest.TestCase):
         self.assertEqual(len(targets), 1)
         t = targets[0]
         self.assertEqual((t["kind"], t["rule"], t["class"], t["tier"]), ("bay", "B3", "bay", "B"))
-        self.assertEqual(t["target_box"], [100, 40, 160, 150])     # arch box down to the supports' bottom
+        # arch box widened to the supports' outer edges (4 px each side), down to their bottom
+        self.assertEqual(t["target_box"], [96, 40, 164, 150])
+        self.assertEqual(t["donor_box"][2] - t["donor_box"][0], 68)
         self.assertIn(t["donor_id"], ("arch_0", "arch_2"))
         self.assertEqual(t["donor_box"][1::2], [40, 150])
         self.assertEqual((t["flipped"], t["confidence"]), (False, 0.0))
         roles = {b["arch"]: b["role"] for b in diag["bay_rows"][0]["bays"]}
         self.assertEqual(roles, {"arch_0": "donor", "arch_1": "target", "arch_2": "donor"})
 
+    def test_bay_is_anchored_where_its_arch_meets_the_neighbours(self) -> None:
+        elements = arcade()
+        elements[1]["box"] = [98, 40, 166, 70]                 # drawn too wide: overlaps both neighbours
+        targets, _ = self.bays(elements, damaged([110, 60, 150, 150]))
+        basis = targets[0]["basis"]
+        self.assertEqual(basis["anchors"], [99.0, 163.0])      # half-way between the facing box edges
+        # the copy maps the donor's anchors onto the target's: the supports stay shared with the neighbours
+        (tx1, _, tx2, _), (dx1, _, dx2, _) = targets[0]["target_box"], targets[0]["donor_box"]
+        fx = (tx2 - tx1) / (dx2 - dx1)
+        for d, t in zip(basis["donor_anchors"], basis["anchors"]):
+            self.assertAlmostEqual(tx1 + (d - dx1) * fx, t, delta=1.0)
+
+    def test_side_margin_takes_in_the_feet_of_the_neighbouring_arches(self) -> None:
+        targets, _ = self.bays(arcade(), damaged([110, 60, 150, 150]), bay_side_margin=0.25)
+        self.assertEqual(targets[0]["target_box"], [85, 40, 175, 150])        # 15 px of each neighbour
+        self.assertEqual(targets[0]["donor_box"][2] - targets[0]["donor_box"][0], 90)
+
     def test_top_extension_adds_the_wall_above_the_arch(self) -> None:
         targets, _ = self.bays(arcade(), damaged([110, 20, 150, 150]), bay_top_extension=1.0)
-        self.assertEqual(targets[0]["target_box"], [100, 10, 160, 150])
+        self.assertEqual(targets[0]["target_box"], [96, 10, 164, 150])
         self.assertEqual(targets[0]["donor_box"][1], 10)
 
     def test_no_donor_when_every_bay_is_damaged_or_too_different(self) -> None:

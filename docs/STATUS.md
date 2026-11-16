@@ -14,7 +14,7 @@
 | Branch | `fix/failure-analysis`, ahead of `main` (`v0.1.0`); not merged, which is the author's decision |
 | Structures | **n = 1 building with expert-checked results** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only. `s04_ani_redeemer` (added 2026-11-15) is a **second building** with a known licence (CC BY-SA 2.0), 1501 x 1956: detection only so far, it waits for the author's damage mask and inventory |
 | Reference run | `outputs/s01_test_church/20261114_170229` (generative fill off, the author's decisions applied). Open `report.html` in it |
-| Tests | 194 pass (`python -m unittest discover tests`, no GPU) |
+| Tests | 197 pass (`python -m unittest discover tests`, no GPU) |
 
 Statements marked **(guess)** are the assistant's reading, not a measurement.
 
@@ -181,14 +181,18 @@ Ordered by how much they limit a presentable result.
   (it almost never did on s01) and puts a colonnette at the right edge of the breach, and a nonsense slot
   at the left image edge. 268,849 mask px lie outside the facade limit and get nothing. With a draft
   inventory these are a first look, not a result.
-- **Bay donor (T39, 2026-11-16), run `outputs/s04_ani_redeemer/20261116_091340`.** The breach is now
-  filled in the first-construction view by a copy of the bay of `draft_arch_03` (two bay guesses,
-  117,248 px; alignment scores 0.45 and 0.41, both on the scale bound); `proposal.png` shows photograph
+- **Bay donor (T39, T39b, T39c, 2026-11-16), run `outputs/s04_ani_redeemer/20261116_130719`.** The breach is
+  now filled in the first-construction view by a copy of the bay of `draft_arch_03` (two bay guesses,
+  125,303 px; anchored on the points where the arch meets its neighbours, so the copied colonnette is
+  shared with the next arch; NCC 0.39 and 0.29); `proposal.png` shows photograph
   and unmarked proposal side by side. The restoration view is still empty: a bay copy is an analogy and
-  is never restored. Open in the picture: a strip at the right edge of the breach, the flatter look of
-  the copy, the nonsense B2 slot at the left image edge. Not judged by the author yet. From here on the
+  is never restored. T39d (side margin, so the copy carries the whole shared support and the neighbouring arch feet) is
+  checked only in a preview, `outputs/s04_ani_redeemer/preview_T39d.png`: the evidence step cannot run
+  since Windows Application Control blocks a torch DLL (WinError 4551, 2026-11-16).
+  Open in the picture: the nonsense B2 slot at the left image edge. The placement follows the draft arch
+  boxes and is as good as they are. Not judged by the author yet. From here on the
   s04 figures are not those of the unchanged pipeline.
-- **Needs the author.** (0) Look at `proposal.png` and `report.html` of run `20261116_091340` and say
+- **Needs the author.** (0) Look at `proposal.png` and `report.html` of run `20261116_130719` and say
   whether the bay copy is the product meant. (1) What to do with the band left of the building: remove it from the mask, or
   ask for a step that mirrors the building's right half into it (a large guess). (2) Review the five
   placements. (3) An inventory of their own, including the upper arcade.

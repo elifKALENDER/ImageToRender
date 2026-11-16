@@ -196,8 +196,9 @@ def window_for(target_box: list[int], ccfg: dict, shape: tuple[int, int]) -> lis
 
 
 def align(rgb: np.ndarray, damage: np.ndarray, patch: np.ndarray, usable: np.ndarray,
-          target_box: list[int], window: list[int], ccfg: dict) -> dict[str, Any]:
-    """Best (scale, aspect, dx, dy) by NCC on visible fragment pixels inside the target box."""
+          target_box: list[int], window: list[int], ccfg: dict, vertical_only: bool = False) -> dict[str, Any]:
+    """Best (scale, aspect, dx, dy) by NCC on visible fragment pixels inside the target box.
+    ``vertical_only``: only dy is searched (a bay, whose box already fixes width and horizontal place)."""
     wx1, wy1, wx2, wy2 = window
     x1, y1, x2, y2 = target_box
     in_box = np.zeros((wy2 - wy1, wx2 - wx1), dtype=bool)
@@ -208,6 +209,8 @@ def align(rgb: np.ndarray, damage: np.ndarray, patch: np.ndarray, usable: np.nda
     sx, sy = int(round(ccfg["refine_shift_frac"] * w)), int(round(ccfg["refine_shift_frac"] * h))
     scales = [float(v) for v in ccfg["refine_scales"]]
     aspects = [float(v) for v in ccfg["refine_aspects"]]
+    if vertical_only:
+        sx, scales, aspects = 0, [1.0], [1.0]
     minimum = int(ccfg["refine_min_visible_px"])
 
     def score(scale: float, dx: int, dy: int, aspect: float = 1.0) -> tuple[float, int]:
@@ -328,8 +331,8 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
     expert's entry for this target, if any: it applies only to the placement it names. ``keep``
     (image-sized, boolean) marks pixels this transfer must not paint over.
 
-    A bay (B3) is aligned to its surviving pixels like a tier A fragment, and is a guess whatever the
-    alignment says."""
+    A bay (B3) is aligned to its surviving pixels in the vertical direction only (its box fixes the
+    rest), and is a guess whatever the alignment says."""
     target_box = record["target_box"]
     is_bay = record["kind"] == BAY
     # ``donor_image``: the donor stands on another photograph (T37); that one has no damage mask
@@ -338,7 +341,8 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
                                 donor_mask, record["donor_box"], bool(record["flipped"]))
     window = window_for(target_box, ccfg, damage.shape)
     if record["tier"] == "A" or is_bay:
-        alignment = align(rgb, damage, patch, usable, target_box, window, ccfg)
+        # a bay's box puts the donor's anchors on the target's (shared supports): only its height is free
+        alignment = align(rgb, damage, patch, usable, target_box, window, ccfg, vertical_only=is_bay)
     else:
         alignment = {"scale": 1.0, "aspect": 1.0, "dx": 0, "dy": 0, "searched": False, "limits": None, "on_bound": [],
                      "note": "tier B: no fragment to align to; placed at the implied box"}
@@ -346,11 +350,20 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
                                                 alignment.get("aspect", 1.0)), window)
     wx1, wy1, wx2, wy2 = window
     damage_w = damage[wy1:wy2, wx1:wx2] > 0
-    colour_shift = [0.0, 0.0, 0.0]
+    colour_shift, colour_gain = [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]
     visible = mask & ~damage_w
     if ccfg["match_colour"] and int(visible.sum()) >= int(ccfg["refine_min_visible_px"]):
-        shift = rgb[wy1:wy2, wx1:wx2][visible].astype(np.float32).mean(0) - image[visible].astype(np.float32).mean(0)
-        image = np.clip(image.astype(np.float32) + shift, 0, 255).astype(np.uint8)
+        want = rgb[wy1:wy2, wx1:wx2][visible].astype(np.float32).mean(0)
+        have = image[visible].astype(np.float32).mean(0)
+        gain = np.ones(3, np.float32)
+        if is_bay and ccfg["bay_match_gain"]:
+            # a bay in other light: a gain keeps the dark joints dark, where a shift alone lifts them
+            # (flat look); beyond the limits the rest is a shift, or light patches burn out
+            low, high = (float(v) for v in ccfg["bay_gain_limits"])
+            gain = np.clip(want / np.maximum(have, 1.0), low, high).astype(np.float32)
+            colour_gain = [round(float(v), 3) for v in gain]
+        shift = want - have * gain
+        image = np.clip(image.astype(np.float32) * gain + shift, 0, 255).astype(np.uint8)
         colour_shift = [round(float(v), 1) for v in shift]
     fill = mask & damage_w
     if keep is not None:
@@ -386,7 +399,7 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
             "donor_px": {"placed": placed, "used_in_damage": used, "discarded_on_surviving": placed - used,
                          "share_used": round(used / placed, 4) if placed else None,
                          "share_discarded": round((placed - used) / placed, 4) if placed else None},
-            "colour_shift": colour_shift, "pixels_painted": painted,
+            "colour_shift": colour_shift, "colour_gain": colour_gain, "pixels_painted": painted,
             "damage_px_in_box": box_damage,
             "damage_px_in_box_left_unfilled": int(box_damage - (fill[y1 - wy1:y2 - wy1, x1 - wx1:x2 - wx1]).sum())}
 
@@ -411,7 +424,8 @@ def target_panel(rgb: np.ndarray, damage: np.ndarray, result: np.ndarray, record
                                 donor_mask, record["donor_box"], bool(record["flipped"]))
     al = entry["alignment"]
     donor, mask = warp(patch, usable, placement(box, al["scale"], al["dx"], al["dy"], al.get("aspect", 1.0)), crop)
-    donor = np.clip(donor.astype(np.float32) + np.asarray(entry["colour_shift"], np.float32), 0, 255).astype(np.uint8)
+    donor = np.clip(donor.astype(np.float32) * np.asarray(entry.get("colour_gain", [1.0, 1.0, 1.0]), np.float32)
+                    + np.asarray(entry["colour_shift"], np.float32), 0, 255).astype(np.uint8)
     photo = rgb[cy1:cy2, cx1:cx2]
     hole = damage[cy1:cy2, cx1:cx2] > 0
     tinted = photo.astype(np.float32).copy()

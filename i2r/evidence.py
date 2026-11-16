@@ -654,30 +654,57 @@ def implied_target(rule: str, element_class: str, box: list[int], donor: dict, f
 BAY = "bay"      # record kind and class of a B3 target: one bay of an arcade, wall and supports included
 
 
-def bay_bottom(arch: dict, active: list[dict], bcfg: dict) -> int | None:
-    """Lower end of the bay under ``arch``: the lowest bottom of the intact supports standing under it
-    (centre within the arch's width, widened by ``row_tolerance``; reaching below the arch). None when
-    no intact support is recorded there."""
+def bay_extent(arch: dict, active: list[dict], bcfg: dict) -> tuple[int, int, int] | None:
+    """(left overhang, right overhang, bottom) of the bay under ``arch``, from the intact supports standing
+    under it (centre within the arch's width, widened by ``row_tolerance``; reaching below the arch): how
+    far they stand out beyond the arch box on each side, and their lowest bottom. None when no intact
+    support is recorded there."""
     x1, _, x2, y2 = arch["box"]
     w, h = box_size(arch["box"])
     margin = float(bcfg["row_tolerance"]) * w
-    bottoms = [e["box"][3] for e in active
-               if e["class"] in bcfg["bay_support_classes"] and e["damage_status"] == "intact"
-               and x1 - margin <= box_centre(e["box"])[0] <= x2 + margin
-               and e["box"][1] < y2 + h and e["box"][3] > y2]
-    return max(bottoms) if bottoms else None
+    boxes = [e["box"] for e in active
+             if e["class"] in bcfg["bay_support_classes"] and e["damage_status"] == "intact"
+             and x1 - margin <= box_centre(e["box"])[0] <= x2 + margin
+             and e["box"][1] < y2 + h and e["box"][3] > y2]
+    if not boxes:
+        return None
+    return (max(0, x1 - min(b[0] for b in boxes)), max(0, max(b[2] for b in boxes) - x2),
+            max(b[3] for b in boxes))
+
+
+def bay_anchors(arch: dict, row: list[dict], tol: float) -> tuple[float, float]:
+    """The x positions where ``arch`` meets its row neighbours: half-way between the two facing box edges
+    when they lie within ``tol`` arch widths of each other (the shared support stands there), else the
+    arch's own box edge."""
+    i = next(k for k, e in enumerate(row) if e["id"] == arch["id"])
+    x1, _, x2, _ = arch["box"]
+    reach = tol * (x2 - x1)
+    left, right = float(x1), float(x2)
+    if i > 0 and abs(row[i - 1]["box"][2] - x1) <= reach:
+        left = (row[i - 1]["box"][2] + x1) / 2.0
+    if i + 1 < len(row) and abs(row[i + 1]["box"][0] - x2) <= reach:
+        right = (row[i + 1]["box"][0] + x2) / 2.0
+    return left, right
 
 
 def tier_b3_bays(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[list[dict], dict]:
     """B3: a damaged bay of an arcade takes the whole neighbouring bay (arch, supports and the wall
     between them) as its donor.
 
-    A bay is the box of an arch of a row, from ``bay_top_extension`` arch heights above the arch down to
-    the bottom of the intact supports under it. A bay whose box is damaged by at most
-    ``bay_donor_max_damage`` is a donor. Every other arch of the row becomes a target when a donor bay
-    exists whose arch agrees in width and height within ``bay_size_tolerance`` (the nearest one wins);
-    its box has the donor's proportions: the arch's own width, the donor's height scaled by the two arch
-    heights. The record's donor is the donor bay's arch, its ``donor_box`` the donor bay.
+    A bay is the box of an arch of a row, widened to the outer edges of the intact supports under it,
+    from ``bay_top_extension`` arch heights above the arch down to the bottom of those supports. A bay
+    whose box is damaged by at most ``bay_donor_max_damage`` is a donor. Every other arch of the row
+    becomes a target when a donor bay exists whose arch agrees in width and height within
+    ``bay_size_tolerance`` (the nearest one wins). The record's donor is the donor bay's arch, its
+    ``donor_box`` the donor bay.
+
+    Neighbouring arches of an arcade spring from one shared support, so a bay is anchored on the two
+    points where its arch meets its row neighbours (``bay_anchors``): the target box is built so that the
+    box-to-box copy puts the donor's anchors on the target's anchors, and the copied support stands under
+    the foot of the neighbouring arch. The box reaches ``bay_side_margin`` of the span beyond each
+    anchor, so the copy also carries the feet of the two neighbouring arches where those are damaged.
+    The height follows the two arch heights. ``anchors`` and
+    ``donor_anchors`` are recorded; the complete step keeps the copy on them (no horizontal search).
 
     This is an analogy between neighbours, not evidence about the damaged bay: confidence is 0 and the
     complete step always places it as a guess."""
@@ -685,24 +712,32 @@ def tier_b3_bays(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[
     size_tol = float(bcfg["bay_size_tolerance"])
     limit = float(bcfg["bay_donor_max_damage"])
     top = float(bcfg["bay_top_extension"])
+    side = float(bcfg["bay_side_margin"])
     height, width = damage.shape
     active = active_elements(elements)
     targets, rows_info = [], []
 
-    def bay_box(arch: dict, depth: float) -> list[int]:
-        x1, y1, x2, _ = arch["box"]
+    def bay_box(arch: dict, x_left: float, x_right: float, depth: float) -> list[int]:
+        y1 = arch["box"][1]
         h = box_size(arch["box"])[1]
-        return [max(0, x1), max(0, int(round(y1 - top * h))), min(width, x2), min(height, int(round(y1 + depth)))]
+        return [max(0, int(round(x_left))), max(0, int(round(y1 - top * h))),
+                min(width, int(round(x_right))), min(height, int(round(y1 + depth)))]
 
     for row in group_rows([e for e in active if e["class"] == bcfg["bay_arch_class"]], tol):
         info: dict[str, Any] = {"elements": [e["id"] for e in row], "bays": []}
         rows_info.append(info)
         donors = []
         for arch in row:
-            bottom = bay_bottom(arch, active, bcfg)
-            if bottom is None:
+            extent = bay_extent(arch, active, bcfg)
+            if extent is None:
                 continue
-            box = bay_box(arch, bottom - arch["box"][1])
+            left, right, bottom = extent
+            dl, dr = bay_anchors(arch, row, tol)
+            # the supports' outer edges, and bay_side_margin of the span beyond the anchors: the feet of
+            # the two neighbouring arches, which stand on the same supports
+            reach = side * (dr - dl)
+            box = bay_box(arch, min(arch["box"][0] - left, dl - reach), max(arch["box"][2] + right, dr + reach),
+                          bottom - arch["box"][1])
             if damage_share(box, damage) <= limit:
                 donors.append((arch, box))
         donor_ids = {a["id"] for a, _ in donors}
@@ -720,8 +755,11 @@ def tier_b3_bays(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[
                 continue
             cx = box_centre(arch["box"])[0]
             donor, donor_box = min(fitting, key=lambda d: abs(box_centre(d[0]["box"])[0] - cx))
-            depth = (donor_box[3] - donor["box"][1]) * box_size(arch["box"])[1] / box_size(donor["box"])[1]
-            box = bay_box(arch, depth)
+            (al, ar), (dl, dr) = bay_anchors(arch, row, tol), bay_anchors(donor, row, tol)
+            fx = (ar - al) / (dr - dl)
+            fy = box_size(arch["box"])[1] / box_size(donor["box"])[1]
+            box = bay_box(arch, al - (dl - donor_box[0]) * fx, ar + (donor_box[2] - dr) * fx,
+                          (donor_box[3] - donor["box"][1]) * fy)
             share = damage_share(box, damage)
             entry.update({"box": box, "damage_share": round(share, 4)})
             if share <= limit:
@@ -734,6 +772,7 @@ def tier_b3_bays(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[
                 "similarity": None, "confidence": 0.0, "alternatives": [],
                 "basis": {"row": [e["id"] for e in row], "arch": arch["id"], "donor_arch": donor["id"],
                           "damage_share": round(share, 4),
+                          "anchors": [round(al, 1), round(ar, 1)], "donor_anchors": [round(dl, 1), round(dr, 1)],
                           "note": "analogy with the neighbouring bay; no confidence measure"},
             })
     return targets, {"bay_rows": rows_info}

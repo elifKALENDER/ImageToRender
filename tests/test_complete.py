@@ -157,14 +157,33 @@ class BayTest(unittest.TestCase):
         entry = report["targets"][0]
         self.assertEqual(entry["status"], complete.GUESS)
         self.assertEqual(entry["acceptance"]["reasons"], [complete.BAY_GUESS_REASON])
-        self.assertEqual((entry["alignment"]["dx"], entry["alignment"]["dy"]), SHIFT)   # aligned like tier A
-        self.assertTrue(np.array_equal(out[60, 75], texture[60 - 10 - SHIFT[1], 75 - 60 - SHIFT[0]]))
+        # only the height is searched: the box fixes width and horizontal place (shared supports)
+        self.assertEqual((entry["alignment"]["dx"], entry["alignment"]["scale"]), (0, 1.0))
+        self.assertEqual(entry["alignment"]["limits"]["dx"], 0)
+        self.assertGreater(entry["pixels_changed"], 0)
+        self.assertFalse(np.array_equal(out[60, 75], rgb[60, 75]))
         self.assertTrue(np.all(damage[labels > 0] == 1))
         for include_b in (False, True):                       # not even with restoration.include_tier_b
             restored, _, report = complete.complete_view("restoration", rgb, damage, [self.bay()], {},
                                                          config(include_tier_b=include_b))
             self.assertEqual(report["targets"][0]["status"], "not_completed")
             self.assertTrue(np.array_equal(restored, rgb))
+
+    def test_bay_in_other_light_is_matched_by_a_limited_gain_then_a_shift(self) -> None:
+        rgb, damage, _, texture = scene()
+        x1, y1, x2, y2 = DONOR_BOX
+        rgb[y1:y2, x1:x2] = texture // 4                       # the donor bay stands in shadow
+        cfg = config()
+        out, _, report = complete.complete_view("first_construction", rgb, damage, [self.bay()], {}, cfg)
+        entry = report["targets"][0]
+        self.assertEqual(entry["colour_gain"], [1.5, 1.5, 1.5])               # the upper limit, not 4
+        self.assertTrue(all(v > 0 for v in entry["colour_shift"]))            # the rest is a shift
+        cfg["complete"]["bay_match_gain"] = False
+        flat, _, report = complete.complete_view("first_construction", rgb, damage, [self.bay()], {}, cfg)
+        self.assertEqual(report["targets"][0]["colour_gain"], [1.0, 1.0, 1.0])
+        inside = np.zeros(damage.shape, bool)
+        inside[45:68, 65:88] = True
+        self.assertGreater(out[inside].std(), flat[inside].std())            # more contrast with the gain
 
     def test_bay_does_not_cover_an_accepted_placement_but_covers_a_guess(self) -> None:
         rgb, damage, mask, _ = scene()
@@ -179,7 +198,7 @@ class BayTest(unittest.TestCase):
         self.assertEqual(by_id["t_001"]["status"], "completed")
         # the accepted tier A pixels keep their label; the slot guess under the bay is covered
         self.assertTrue(np.array_equal(labels == by_id["t_001"]["label"], alone_labels > 0))
-        self.assertEqual(by_id["t_003"]["pixels_changed"], 0)
+        self.assertLess(by_id["t_003"]["pixels_changed"], 13 * 20)           # the slot's hole is 13 x 20 px
         self.assertGreater(by_id["t_002"]["pixels_changed"], 0)
 
 
