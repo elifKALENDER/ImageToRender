@@ -887,6 +887,123 @@ other records of run `20261116_130719`, and ran `complete.complete_view`:
 is whole and both arches land on it. s01 was not checked with the margin. To do when torch loads again:
 `python run.py --structure s04_ani_redeemer --from evidence --view both --no-review`, the same for s01.
 197 tests (GPU-free, pass).*
+
+*T39d, pipeline runs (2026-11-16, after the author turned Smart App Control off; torch loads again).
+s04 run `20261116_160549`: the same figures as the preview (bay of `draft_arch_05` 116,576 px, dy -11,
+NCC 0.40, seam 0.39; of `draft_arch_04` 11,047 px, dy -2, NCC 0.37, seam 0.30; no damage pixel of either
+bay box left unfilled; first-construction 130,901 px; restoration 0). Seen by the assistant in one crop:
+the capital is whole and both arches land on it; a vertical seam shows at the left edge of the copy, and
+the donor's lichen patch is repeated above the arch. s01 run `20261116_160656`: restoration image
+byte-identical to run `20261115_111946`; bay guess 3,891 px (NCC 0.21, seam -0.09), first-construction
+9,670 px, the same as before the margin. Not judged by the author yet.*
+
+*T39e, 2026-11-16 (the author on run `20261116_160549`: perhaps acceptable, but the colonnettes should
+stand a little further left, then the part at the right would fit too). Measured in enlargements: the
+capital between `draft_arch_03` and `draft_arch_04` is centred on x 644.5, while the draft boxes met at
+636; so the copy put the right colonnette of the breach about 12 px too far right, into the standing wall
+of the next bay. (1) The draft arch boxes were corrected at their junctions to the measured capital centres
+(394, 644.5, 898) and, for the lost support, to x 1148, chosen by the assistant so that the shaft ends at
+the standing wall edge; still `source: assistant_draft`, corrected copy in folder `20261116_163448`
+(intermediate). (2) With the new boxes the vertical search (bound 0.10 of the height, 62 px) lifted the
+bay 33 px, the capital 22 px above the neighbours'; a bay is now searched by at most
+`complete.bay_shift_frac` (0.02, by eye on s04) of its height. s04 run `20261116_163713`: bay of
+`draft_arch_05` 116,417 px (dy -12, on the bound, NCC 0.38, seam 0.38), of `draft_arch_04` 11,047 px
+(dy -4, NCC 0.47, seam 0.51), none of their damage left unfilled; first-construction 127,464 px; 12
+targets (3 A, 2 B, 7 C): with the corrected boxes the B2 symmetry slots are gone (axis now x = 291 over
+4 elements) and `t_005` takes `draft_arch_02` as donor. Seen by the assistant: the copied shaft stands
+against the standing wall, the capital top is level with the course line, both arches land on it; the
+capital's right end is still clipped by standing pixels, the lichen patch is repeated. No perspective
+warp is made: the copy is scaled box to box only. s01 run `20261116_163835`: restoration byte-identical,
+bay guess unchanged (3,891 px, dy 5 now on the bound). 197 tests. Not judged by the author yet.*
+
+*T39f, 2026-11-16, a trial that failed (the author on run `20261116_163713`): the copy imitates the old
+surface. An addition should be clean, not glossy, and readable as added (Venice Charter); the copy also
+brings marks known only of the donor bay (lichen, possibly an inscription) and a base where the
+photograph shows rubble. The author's aim for the product: show the restorer what a Charter-conform
+completion could look like; what cannot be known (an inscription) is not drawn, the restorer reports it
+as a comment. Tried: `complete.bay_surface: new_work` (`complete.new_work_surface`: the donor's grey
+relief, smoothed edge-preservingly, limited, in one stone tone). Result on s04,
+`outputs/s04_ani_redeemer/preview_T39f_new_work.png` (local): the wall field is clean, but the lighter
+colonnettes and capital become flat bands and the lichen patch stays as a light blot, because a
+brightness limit cannot tell lichen from light stone. Not usable; the default stays `copy` (run
+`20261116_165441`, image byte-identical to `20261116_163713`). The function has no test yet. Open: R-039a,
+a new-work rendering that keeps the mouldings (per element: wall field as plain coursed stone, arch and
+supports from their masks), and where a bay ends at the bottom when the base is not visible.*
+
+*T40, 2026-11-16 (was R-039a; the author agreed to the route). A bay is drawn as new work
+(`complete.bay_surface: new_work`, now the default; `copy` keeps the donor's pixels). The element masks
+could not carry it: on s04 the SAM mask of an arch is the wall field under it and a support mask is one
+shaft of a pair. So the worked stone is drawn from geometry (`complete.bay_relief_zone`): an arch is a
+half ring between the two anchors with its crown at the arch box top and straight legs, repeated one span
+to each side; a support is a strip about each anchor. `complete.new_work_surface`: one stone tone (median
+colour of the donor's plain wall as photographed, times the ratio of the medians of target and donor over
+the standing pixels, limited by `bay_gain_limits`); plain wall keeps only a row profile (courses), the
+relief zone keeps the donor's light and shade. The record keeps `surface` and `not_drawn` (surface of the
+lost bay, base below the ground line); `report.html` shows the latter with the placement. The evidence
+record got `basis.donor_arch_box`, so the evidence step must be re-run for older run folders. s04 run
+`20261116_172024`: same pixels painted as before (bays 116,417 + 11,047 px, first-construction
+127,464 px); lichen, stains and wall marks of the donor are gone, arch ring and colonnettes keep their
+form, the tone is near the standing wall and can be told from it. Seen by the assistant, not measured:
+no course lines show (the wall is plain), the ring and colonnettes are pinker than the old stone and a
+little soft, lichen on the donor's arch ring stays as light spots, a few specks of the photograph stand
+in the field (holes of the mask), the capital's right end is still clipped. The ring and strip shares are
+read off s04 (n = 1). s01 run `20261116_171939`: restoration byte-identical; the bay guess (3,891 px) is
+now drawn as new work, not looked at. 199 tests. Not judged by the author yet.*
+
+*T40b, 2026-11-16 (the author judged run `20261116_172024`: the right colonnette still stands too far
+right and its capital runs into the next bay's wall; the drawing quality is poor; asks whether the rubble
+in front stays). Measured in an enlargement: the feet of `draft_arch_05` and `draft_arch_06` meet at
+x = 1135 (the V of the two outer mouldings), not 1148. Draft boxes corrected (`draft_arch_05` x2 1140,
+`draft_arch_06` x1 1130; inventory in the run folders from `20261116_193242` on). With its true width
+`draft_arch_06` also becomes a B3 target, donor bay of `draft_arch_02`, which stands in deep shadow. Two
+changes followed: bays are painted most damaged first and a later bay never paints over an earlier one
+(the shared support comes from one donor); the tone ratio of a new-work bay has its own, wider limits
+(`complete.new_work_light_limits`). s04 run `20261116_193628`: 13 targets, bays 113,832 + 11,471 +
+9,153 px, first-construction 134,456 px; the copied colonnette pair stands under the foot of the next
+arch (seen by the assistant). The tone of the main bay got lighter (the ratio was clipped before). Not
+solved: drawing quality (flat wall, soft pink ring and colonnettes); the piece of `draft_arch_06`'s bay
+below its base line is drawn although the base is not visible there. No test covers the bay-over-bay
+rule yet. s01 run `20261116_193754`: restoration byte-identical. 199 tests.*
+
+*T41, 2026-11-16 (the author: "copy, and clean the lichen"; for the rubble "option b, let us try").
+`complete.bay_surface: clean_copy` (new default, `complete.clean_copy_surface`): the donor bay's stone as
+photographed; pixels lighter than `clean_copy_max_light` times the plain wall's median grey (times
+`clean_copy_relief_factor` on worked stone) are foreign (lichen, light stains, grass, a rock before the
+wall) and take the colour of the clean stone round them, keeping only their grain; bottom rows of the
+donor that are mostly foreign (its own foot behind grass and rock) are replaced by the rows above,
+mirrored, so wall and shafts are continued straight down and no base is drawn (`hidden_rows`); the copy
+is brought to the target bay's light (ratio of medians) and its colour noise is smoothed. All thresholds
+by eye on s04 (n = 1). Rubble trial: `data/structures/s04_ani_redeemer/damage_mask.png` is now the
+assistant's draft v2 (`damage_mask_v2_assistant_draft_20261116.png`, local like all masks): the author's
+v1 plus, for x 700 to 1180, everything from the mask's lower edge down to a ground line y = 1880 chosen
+by the assistant (33,058 px added). v1 is kept as `damage_mask_v1_author_20261115.png`. s04 run
+`20261116_195512`: bays 138,071 + 19,554 + 9,869 px, first-construction 167,494 px; 70 hidden rows on
+the main bay. Seen by the assistant: real joints, arch and colonnettes; the wall reaches the ground line
+and the rubble before the breach is gone. Flaws: the area above the arch is mottled (cleaned lichen, an
+orange patch stays); some lichen stays on the arch ring and the right capital is flattened by the
+cleaning; the lower 70 px are a mirror image of the rows above (shafts without base); a step where the
+standing left colonnette meets its copied lower end; the bay of `draft_arch_06` (donor in deep shadow,
+light factor at its limit) leaves a noisy strip and a dark block at the lower right; the rubble left of
+x = 700 and right of x = 1180 stays. 200 tests (one new, for the clean copy). Not judged by the author.*
+
+*T41b, 2026-11-16 (the author judged run `20261116_195512`: "not bad", but it looks copied and pasted and
+too weathered; it should read as newly built without standing out; the standing wall right of the breach
+and the foot of the next bay must not be painted; the strip right of the colonnette sits oddly).
+(1) `complete.clean_copy_new_stone` (0.85) and `clean_copy_contrast` (0.7): the cleaned copy becomes one
+stone colour carrying the copy's light and shade at lowered contrast; `new_work_tone_gain` 1.08.
+(2) A clean copy whose donor stands in other light than the target (ratio of medians outside
+`new_work_light_limits`) is not painted and says so: the bay of `draft_arch_06` (donor `draft_arch_02`
+in deep shadow, factor above 4) is no longer drawn, which removes the strip and the block the author
+named. (3) Bays no longer paint into each other's span: a bay first leaves the span between the anchors
+of every bay still to come, and fills what is still open in its box when all are done
+(`complete.complete_view`); before, the main bay's left margin, copied from the shadow side of its
+donor, lay as a dark band in the next bay. (4) s04 `structure.yaml`: `bay_side_margin` 0.22, so the
+main bay reaches the broken edge of the next bay's wall. s04 run `20261116_200639`: bays 132,067 +
+28,614 px, first-construction 160,681 px, nothing of the two bay boxes left open. Seen by the
+assistant: the bay reads as new stone of one colour with real joints, arch and colonnettes; no dark
+band. Flaws: a lighter block right of the new capital; the lower 70 px are mirrored rows (no base); a
+few specks of the photograph in the field; the part of the author's mask under `draft_arch_06` stays
+open. Thresholds by eye on s04 (n = 1). 201 tests (one new, for the bay spans). Not judged by the author.*
 **Files.** `i2r/evidence.py`, `i2r/complete.py`, `i2r/render.py`, `i2r/report.py`, `config.yaml`,
 `data/structures/s04_ani_redeemer/structure.yaml`, `tests/test_evidence_b.py`, `tests/test_complete.py`,
 `tests/test_render.py`.

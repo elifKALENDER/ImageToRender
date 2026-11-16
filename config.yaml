@@ -20,6 +20,12 @@ scale:
     - damage.cut_margin_px
     - complete.feather_px
     - complete.seam_band_px
+    - complete.new_work_smooth_px
+    - complete.new_work_blend_px
+    - complete.clean_copy_grow_px
+    - complete.clean_copy_detail_px
+    - complete.clean_copy_reach_px
+    - complete.clean_copy_chroma_px
     - complete.crop_context_px
     - restoration.outline_px
     - restoration.hatch_spacing_px
@@ -258,6 +264,40 @@ complete:
   # its dark joints (flat look), while an unlimited gain burns out light patches (s04: gain 2.0, T39b).
   bay_match_gain: true
   bay_gain_limits: [0.67, 1.5]      # chosen by eye on s04 (n = 1), not calibrated
+  # Surface of a bay copy (T40, the author 2026-11-16: an addition must read as new work, clean but not
+  # glossy, and must not repeat what is known only of the donor bay: its lichen, stains, carved marks).
+  # "new_work": one stone tone; plain wall keeps only its courses, the arch rings and supports keep the
+  # donor's light and shade (complete.bay_relief_zone, complete.new_work_surface).
+  # "copy": the donor's pixels as photographed.
+  # "clean_copy" (T41, the author 2026-11-16 found "new_work" flat like paint): the donor's stone as
+  # photographed, with lichen, light stains and anything standing before the wall removed
+  # (complete.clean_copy_surface), in the target bay's light.
+  bay_surface: clean_copy
+  clean_copy_max_light: 1.7         # lighter than this times the wall's median grey = foreign; by eye on s04 (n = 1)
+  clean_copy_relief_factor: 1.2     # arch rings and supports: lit edges are not lichen; by eye on s04
+  clean_copy_grow_px: 3             # foreign patches are grown by this before cleaning
+  clean_copy_reach_px: 12           # a cleaned pixel takes the colour of the clean stone within about this distance
+  clean_copy_detail_px: 3           # grain kept in a cleaned patch: grey over its blur of this radius
+  clean_copy_detail_limits: [0.85, 1.15]
+  clean_copy_ground_share: 0.05     # a bottom row with more foreign pixels than this is hidden (donor's foot behind grass)
+  # The author 2026-11-16: the copy looked pasted and too weathered; an addition should read as newly
+  # built, without standing out. By eye on s04 (n = 1).
+  clean_copy_new_stone: 0.85        # share of the one-colour new stone in the result (0 = plain cleaned copy)
+  clean_copy_contrast: 0.7          # exponent on light and shade of the new stone (1 = as photographed)
+  clean_copy_chroma_px: 1.5         # colour noise of the copy is smoothed over this; by eye on s04
+  # Shares of the bay's span, read off s04 (n = 1): thickness of the arch ring, half width of a support.
+  new_work_ring_share: 0.17
+  new_work_support_share: 0.12
+  new_work_smooth_px: 1             # edge-preserving smoothing radius of the relief; by eye on s04
+  new_work_smooth_range: 12         # grey levels the smoothing bridges; by eye on s04
+  new_work_relief_limits: [0.3, 2.0]    # light and shade of worked stone, relative to the wall's grey
+  new_work_course_limits: [0.8, 1.05]   # a course joint darkens a wall row at most this far; by eye on s04
+  new_work_blend_px: 2              # width of the blend between plain wall and worked stone
+  new_work_light_limits: [0.25, 4.0]  # target bay against donor bay (a donor in shadow, s04 bay 02); by eye, n = 1
+  new_work_tone_gain: 1.08          # new stone a little lighter than the standing stone; by eye on s04
+  # A bay is searched only vertically, by at most this share of its height: its box already follows the
+  # arch boxes. With refine_shift_frac (0.10) the search lifted the s04 bay 33 px, capital 22 px too high.
+  bay_shift_frac: 0.02              # chosen by eye on s04 (n = 1), not calibrated
   # Alpha ramps from 0 at the damage-mask edge to 1 this many pixels inside it; outside it stays 0.
   feather_px: 2
   # Acceptance of a tier A placement (T28, docs/rnd/RND-004-alignment-acceptance.md). A placement that

@@ -11,3 +11,7 @@ evidence:
     # (180 px) above the arch boxes of the draft inventory (arch top y = 1440, cornice about y = 1265).
     # Read off the photograph by the assistant, not measured; set after the first run of 2026-11-15.
     bay_top_extension: 0.95
+    # The breach reaches 40 to 50 px beyond the lost support (x = 1135) into the broken edge of the next
+    # bay's wall (to about x = 1185); with the default 0.15 (35 px) a slit of the mask stays open there.
+    # Read off the photograph by the assistant, 2026-11-16.
+    bay_side_margin: 0.22

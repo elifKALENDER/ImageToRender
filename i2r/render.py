@@ -429,7 +429,10 @@ def provenance_entries(records: list[dict], completion: dict) -> list[dict]:
                                    "seam_agreement": e.get("seam_agreement")}
                 acceptance[view] = e.get("acceptance")
                 placement[view] = {"placement_box": e.get("placement_box"), "donor_px": e.get("donor_px"),
-                                   "panel": e.get("panel_file")}
+                                   "panel": e.get("panel_file"),
+                                   # T40: a bay drawn as new work, and what it leaves out on purpose
+                                   **({"surface": e["surface"], "not_drawn": e["not_drawn"]}
+                                      if e.get("not_drawn") else {})}
         # T34: a donor named by the expert replaces the automatic one of evidence.json in the record
         choice = next((e["donor_choice"] for by_id in per_view.values()
                        if (e := by_id.get(r["target_id"])) and e.get("donor_choice")), None)

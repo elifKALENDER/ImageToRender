@@ -210,7 +210,8 @@ def align(rgb: np.ndarray, damage: np.ndarray, patch: np.ndarray, usable: np.nda
     scales = [float(v) for v in ccfg["refine_scales"]]
     aspects = [float(v) for v in ccfg["refine_aspects"]]
     if vertical_only:
-        sx, scales, aspects = 0, [1.0], [1.0]
+        # the bay box already puts the arch top on the arch top: only a small vertical correction
+        sx, sy, scales, aspects = 0, int(round(ccfg["bay_shift_frac"] * h)), [1.0], [1.0]
     minimum = int(ccfg["refine_min_visible_px"])
 
     def score(scale: float, dx: int, dy: int, aspect: float = 1.0) -> tuple[float, int]:
@@ -267,8 +268,159 @@ def seam_agreement(image: np.ndarray, mask: np.ndarray, photo: np.ndarray, damag
     return round(ncc(grey(image)[band], grey(photo)[band]), 4), n
 
 
+def bay_relief_zone(donor_box: list[int], arch_box: list[int], anchors: list[float], ccfg: dict) -> np.ndarray:
+    """Boolean map over the donor bay box: True where the bay's worked stone stands (arch rings and
+    supports), False on plain wall. Drawn from the arch box and the anchors, not from element masks:
+    an arch is a half ring that springs from the two anchors, its crown at the arch box top, with
+    straight legs below the centre line; its neighbours repeat it one span to each side; a support is
+    a strip about each anchor from the centre line down. ``new_work_ring_share`` (ring thickness) and
+    ``new_work_support_share`` (half strip width) are shares of the span."""
+    x1, y1, x2, y2 = donor_box
+    left, right = float(anchors[0]) - x1, float(anchors[1]) - x1
+    span = right - left
+    radius = span / 2.0
+    centre_y = arch_box[1] - y1 + radius
+    ring = float(ccfg["new_work_ring_share"]) * span
+    strip = float(ccfg["new_work_support_share"]) * span
+    yy, xx = np.mgrid[0:y2 - y1, 0:x2 - x1].astype(np.float32)
+    zone = np.zeros(xx.shape, dtype=bool)
+    for k in (-1, 0, 1):
+        cx = (left + right) / 2.0 + k * span
+        # distance from the arch's centre line: radial above it, horizontal below it (the legs)
+        d = np.where(yy <= centre_y, np.hypot(xx - cx, yy - centre_y), np.abs(xx - cx))
+        zone |= (d >= radius - ring) & (d <= radius + strip) & (yy <= arch_box[3] - y1)
+    for x in (left, right):
+        zone |= (np.abs(xx - x) <= strip) & (yy >= centre_y)
+    return zone
+
+
+def new_work_surface(image: np.ndarray, mask: np.ndarray, relief_zone: np.ndarray, ccfg: dict,
+                     light: np.ndarray | None = None) -> np.ndarray:
+    """A bay copy drawn as new work: what a completion in new stone could look like, without the
+    donor's own surface (lichen, stains, carved marks: facts about the donor bay only).
+
+    ``image`` is the donor bay as photographed (no colour match: the mean of a bay with lichen is not
+    the colour of its stone). Everything gets one stone tone, the median colour of the donor's plain
+    wall (``mask`` outside ``relief_zone``), times ``light`` (per channel: how much lighter the target
+    bay stands than the donor bay). Plain wall keeps only its courses: per image row the median grey of the wall
+    pixels, relative to the wall's median, within ``new_work_course_limits``. The relief zone (arch
+    rings, supports) keeps the donor's light and shade: its grey, smoothed edge-preservingly, relative
+    to the wall's median grey, within ``new_work_relief_limits``. The two are blended over
+    ``new_work_blend_px``; ``new_work_tone_gain`` sets the new stone a little apart from the old."""
+    wall = mask & ~relief_zone
+    if not wall.any():
+        return image
+    tone = np.median(image[wall].astype(np.float32), axis=0)
+    if light is not None:
+        tone = tone * light.astype(np.float32)
+    g = grey(image)
+    base = max(float(np.median(g[wall])), 1.0)
+    low, high = (float(v) for v in ccfg["new_work_course_limits"])
+    rows = np.ones(g.shape[0], np.float32)
+    for y in np.flatnonzero(wall.sum(1) >= int(ccfg["refine_min_visible_px"])):
+        rows[y] = np.clip(float(np.median(g[y][wall[y]])) / base, low, high)
+    size = max(1, int(round(float(ccfg["new_work_smooth_px"]))))
+    smooth = cv2.bilateralFilter(g, 2 * size + 1, float(ccfg["new_work_smooth_range"]), float(size))
+    low, high = (float(v) for v in ccfg["new_work_relief_limits"])
+    relief = np.clip(smooth / base, low, high)
+    blend = max(0.0, float(ccfg["new_work_blend_px"]))
+    weight = relief_zone.astype(np.float32)
+    if blend > 0:
+        weight = cv2.GaussianBlur(weight, (0, 0), blend)
+    light = weight * relief + (1.0 - weight) * rows[:, None]
+    out = light[..., None] * tone[None, None, :] * float(ccfg["new_work_tone_gain"])
+    return np.clip(out + 0.5, 0, 255).astype(np.uint8)
+
+
+def clean_copy_surface(image: np.ndarray, mask: np.ndarray, relief_zone: np.ndarray, ccfg: dict,
+                       light: np.ndarray | None = None) -> tuple[np.ndarray, int, int]:
+    """A bay copy that keeps the donor's stone (joints, texture, arch and supports as photographed) and
+    drops what lies on it or in front of it: lichen, light stains, a rock or grass before the wall.
+
+    Foreign pixels are those lighter than ``clean_copy_max_light`` times the median grey of the plain
+    wall (``mask`` outside ``relief_zone``; on worked stone the limit is ``clean_copy_relief_factor``
+    times higher), grown by ``clean_copy_grow_px``. Each gets the colour of
+    the clean stone round it (mean of the clean pixels of its own zone, plain wall or worked stone,
+    weighted over ``clean_copy_reach_px``; the zone's median where none is near), modulated only by
+    its fine detail (grey over its own blur of ``clean_copy_detail_px``, within
+    ``clean_copy_detail_limits``): the patch goes, the grain stays. The copy is then multiplied by
+    ``light`` (target bay against donor bay, per channel) and ``new_work_tone_gain``, and its colour
+    noise, which the factor amplifies, is smoothed over ``clean_copy_chroma_px`` (brightness untouched).
+    ``clean_copy_new_stone`` (0 to 1) turns the copy into new stone: one stone colour carrying the
+    copy's light and shade at ``clean_copy_contrast`` (an exponent below 1 flattens weathering).
+
+    The donor's own foot is often hidden too (grass, rubble). From the bottom of the copy upwards, the
+    rows in which more than ``clean_copy_ground_share`` of the pixels are foreign count as hidden; they
+    are replaced by the rows above them, mirrored at the last visible row: wall and shafts are
+    continued straight down, a base is not drawn (returned as ``hidden_rows``).
+    Returns the image, the number of cleaned pixels and the number of hidden rows."""
+    wall = mask & ~relief_zone
+    if int(wall.sum()) < int(ccfg["refine_min_visible_px"]):
+        return image, 0, 0
+    g = grey(image)
+    limit = float(ccfg["clean_copy_max_light"]) * max(float(np.median(g[wall])), 1.0)
+    rows = np.flatnonzero(mask.any(1))
+    share = ((mask & (g > limit)).sum(1) / np.maximum(mask.sum(1), 1))[rows]
+    hidden = 0
+    while hidden < rows.size // 2 and share[rows.size - 1 - hidden] > float(ccfg["clean_copy_ground_share"]):
+        hidden += 1
+    if hidden:
+        image = image.copy()
+        last = rows.size - 1 - hidden                      # index of the last visible row
+        for k in range(1, hidden + 1):
+            image[rows[last + k]] = image[rows[max(0, last - k)]]
+        g = grey(image)
+    out = image.astype(np.float32)
+    grow = max(0, int(round(float(ccfg["clean_copy_grow_px"]))))
+    reach = max(1.0, float(ccfg["clean_copy_reach_px"]))
+    low, high = (float(v) for v in ccfg["clean_copy_detail_limits"])
+    detail = np.clip(g / np.maximum(cv2.GaussianBlur(g, (0, 0), max(1.0, float(ccfg["clean_copy_detail_px"]))), 1.0),
+                     low, high)
+    # worked stone has lit edges of its own: a higher limit there (same base, the plain wall)
+    foreign_all = mask & (g > np.where(relief_zone, limit * float(ccfg["clean_copy_relief_factor"]), limit))
+    if grow > 0:
+        k = 2 * grow + 1
+        foreign_all = (cv2.dilate(foreign_all.astype(np.uint8),
+                                  cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))) > 0) & mask
+    source = image.astype(np.float32)
+    for zone in (wall, mask & relief_zone):
+        foreign, clean = zone & foreign_all, zone & ~foreign_all
+        if not foreign.any() or not clean.any():
+            continue
+        weight = cv2.GaussianBlur(clean.astype(np.float32), (0, 0), reach)
+        near = cv2.GaussianBlur(source * clean[..., None], (0, 0), reach) / np.maximum(weight, 1e-3)[..., None]
+        tone = np.median(source[clean], axis=0)
+        near = np.where((weight > 0.02)[..., None], near, tone[None, None, :])
+        alpha = cv2.GaussianBlur(foreign.astype(np.float32), (0, 0), max(1.0, grow / 2.0))[..., None]
+        out = out * (1.0 - alpha) + detail[..., None] * near * alpha
+    # new stone: one stone colour (median of the clean plain wall) carrying the copy's light and shade,
+    # its contrast lowered; mixed with the copy by clean_copy_new_stone (0 = the copy as it is)
+    mix = float(ccfg["clean_copy_new_stone"])
+    if mix > 0:
+        clean_wall = wall & ~foreign_all
+        if clean_wall.any():
+            tone = np.median(source[clean_wall], axis=0)
+            base = max(float(np.median(g[clean_wall])), 1.0)
+            shade = np.power(np.maximum(grey(np.clip(out, 0, 255)), 1.0) / base, float(ccfg["clean_copy_contrast"]))
+            out = out * (1.0 - mix) + shade[..., None] * tone[None, None, :] * mix
+    factor = float(ccfg["new_work_tone_gain"]) * (np.ones(3, np.float32) if light is None else light.astype(np.float32))
+    out = np.clip(out * factor[None, None, :] + 0.5, 0, 255).astype(np.uint8)
+    chroma = float(ccfg["clean_copy_chroma_px"])
+    if chroma > 0:
+        ycc = cv2.cvtColor(out, cv2.COLOR_RGB2YCrCb)
+        ycc[..., 1:] = cv2.GaussianBlur(ycc[..., 1:], (0, 0), chroma)
+        out = cv2.cvtColor(ycc, cv2.COLOR_YCrCb2RGB)
+    return out, int(foreign_all.sum()), hidden
+
+
 TIER_B_GUESS_REASON = "tier B: position implied by a pattern, no fragment in the photograph"
 REFERENCE_GUESS_REASON = "donor from another photograph of the building"
+# what a bay drawn as new work leaves out on purpose; shown to the expert with the placement
+NEW_WORK_NOT_DRAWN = ("surface of the lost bay (inscriptions, carved marks, patina): unknown, not drawn; "
+                      "base below the visible ground line: not visible in the photograph, not drawn")
+CLEAN_COPY_NOT_DRAWN = ("surface of the lost bay (inscriptions, carved marks, patina): unknown; the stone shown is "
+                        "the neighbouring bay's, with its lichen and light stains removed; where the neighbouring bay's own "
+                        "foot is hidden, wall and shafts are continued straight down: the base is not known")
 BAY_GUESS_REASON = "whole bay copied from a neighbouring bay: an analogy, not evidence about this bay"
 
 
@@ -351,6 +503,7 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
     wx1, wy1, wx2, wy2 = window
     damage_w = damage[wy1:wy2, wx1:wx2] > 0
     colour_shift, colour_gain = [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]
+    photographed = image
     visible = mask & ~damage_w
     if ccfg["match_colour"] and int(visible.sum()) >= int(ccfg["refine_min_visible_px"]):
         want = rgb[wy1:wy2, wx1:wx2][visible].astype(np.float32).mean(0)
@@ -370,11 +523,40 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
         fill &= ~keep[wy1:wy2, wx1:wx2]
     seam, seam_px = seam_agreement(image, mask, rgb[wy1:wy2, wx1:wx2], damage_w, fill,
                                    int(ccfg["seam_band_px"]), int(ccfg["seam_min_px"]))
+    surface = "copy"
+    cleaned_px = hidden_rows = 0
+    other_light = None
+    if is_bay and ccfg["bay_surface"] in ("new_work", "clean_copy"):
+        # after the seam measurement, which compares the donor as photographed
+        surface = ccfg["bay_surface"]
+        basis = record["basis"]
+        zone = bay_relief_zone(record["donor_box"], basis["donor_arch_box"], basis["donor_anchors"], ccfg)
+        _, zone = warp(patch, zone, placement(target_box, alignment["scale"], alignment["dx"], alignment["dy"],
+                                              alignment.get("aspect", 1.0)), window)
+        # the light on the target bay against the donor bay: ratio of the medians over the standing
+        # pixels (a median is not moved by a lichen patch, the mean of the colour match is)
+        light = None
+        if int(visible.sum()) >= int(ccfg["refine_min_visible_px"]):
+            # wider than bay_gain_limits: the tone is one flat colour, a large factor amplifies no texture
+            low, high = (float(v) for v in ccfg["new_work_light_limits"])
+            ratio = (np.median(rgb[wy1:wy2, wx1:wx2][visible].astype(np.float32), axis=0)
+                     / np.maximum(np.median(photographed[visible].astype(np.float32), axis=0), 1.0))
+            light = np.clip(ratio, low, high)
+            # a copy keeps the donor's pixels: beyond the limits they would be mostly amplified noise
+            if surface == "clean_copy" and (ratio.min() < low or ratio.max() > high):
+                other_light = (f"donor bay stands in other light (factor {float(ratio.min()):.2f} to "
+                               f"{float(ratio.max()):.2f}, outside new_work_light_limits): not drawn")
+        if surface == "new_work":
+            image = new_work_surface(photographed, mask, zone, ccfg, light)
+        else:
+            image, cleaned_px, hidden_rows = clean_copy_surface(photographed, mask, zone, ccfg, light)
     reasons = [BAY_GUESS_REASON] if is_bay else judge(alignment, seam, record["tier"], ccfg, tier_b_is_guess)
     if donor_image is not None and ccfg["reference_donor_is_guess"]:
         reasons.append(REFERENCE_GUESS_REASON)
+    if other_light:
+        reasons.append(other_light)
     accepted = not reasons
-    is_painted = accepted or paint_guess
+    is_painted = (accepted or paint_guess) and not other_light
     acceptance: dict[str, Any] = {}
     if decision:
         expert = decision["decision"] if decision.get("placement") == placement_signature(record, alignment) else "stale"
@@ -399,7 +581,8 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
             "donor_px": {"placed": placed, "used_in_damage": used, "discarded_on_surviving": placed - used,
                          "share_used": round(used / placed, 4) if placed else None,
                          "share_discarded": round((placed - used) / placed, 4) if placed else None},
-            "colour_shift": colour_shift, "colour_gain": colour_gain, "pixels_painted": painted,
+            "colour_shift": colour_shift, "colour_gain": colour_gain, "surface": surface, "cleaned_px": cleaned_px, "hidden_rows": hidden_rows,
+            "pixels_painted": painted,
             "damage_px_in_box": box_damage,
             "damage_px_in_box_left_unfilled": int(box_damage - (fill[y1 - wy1:y2 - wy1, x1 - wx1:x2 - wx1]).sum())}
 
@@ -657,10 +840,35 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
     labels = np.zeros(damage.shape, dtype=np.uint16)
     label_names: dict[str, str] = {}
     results = []
-    accepted_labels: list[int] = []
+    kept_labels: list[int] = []      # accepted placements and bays already painted
     # Bays last: a bay copy is one coherent piece, so it covers the element guesses under it, but never
-    # a placement that was accepted (by the tests or by the expert).
-    for record in sorted(records, key=lambda r: (r["kind"] == BAY, r["confidence"] or 0.0)):
+    # a placement that was accepted (by the tests or by the expert). Neighbouring bay boxes overlap
+    # (each reaches beyond its supports), so: a bay first paints everything but the span of the other
+    # bays still to come (between their anchors: that wall is theirs, and their donor's light fits it),
+    # the most damaged bay first, never over a bay painted before; when all are done, each painted bay
+    # fills what is still open in its box (the span of a neighbour that was not painted).
+    def paint_order(r: dict) -> tuple:
+        if r["kind"] == BAY:
+            return (1, -float(r["basis"]["damage_share"]))
+        return (0, r["confidence"] or 0.0)
+
+    spans: dict[str, np.ndarray] = {}
+    for r in records:
+        if r["kind"] == BAY and rule(r, config)[0] and r.get("donor_id"):
+            span = np.zeros(damage.shape, dtype=bool)
+            (left, right), (_, top, _, bottom) = r["basis"]["anchors"], r["target_box"]
+            span[top:bottom, int(round(left)):int(round(right))] = True
+            spans[r["target_id"]] = span
+    painted_bays: list[tuple[dict, dict, int]] = []
+
+    def transfer_args(record: dict) -> dict:
+        return {"paint_guess": GUESS_IS_PAINTED[view],
+                # only where a guess is painted: restoration.include_tier_b stays a plain switch
+                "tier_b_is_guess": GUESS_IS_PAINTED[view] and bool(config["first_construction"]["tier_b_is_guess"]),
+                "decision": (decisions or {}).get(decision_key(record)),
+                "donor_image": None if record["kind"] == BAY else (donor_images or {}).get(record["donor_id"])}
+
+    for record in sorted(records, key=paint_order):
         do_it, why = rule(record, config)
         entry = {"target_id": record["target_id"], "tier": record["tier"], "kind": record["kind"],
                  "donor_id": record.get("donor_id"), "rule_reason": why}
@@ -677,23 +885,30 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
             label = len(label_names) + 1
             label_names[str(label)] = record["target_id"]
             is_bay = record["kind"] == BAY
+            keep = None
+            if is_bay:
+                spans.pop(record["target_id"], None)
+                keep = np.isin(labels, kept_labels)
+                for span in spans.values():
+                    keep |= span
             info = transfer(out, labels, rgb, damage, record, donor_mask_for(record, donor_masks, damage.shape),
-                            label, ccfg, paint_guess=GUESS_IS_PAINTED[view],
-                            # only where a guess is painted: restoration.include_tier_b stays a plain switch
-                            tier_b_is_guess=GUESS_IS_PAINTED[view] and bool(config["first_construction"]["tier_b_is_guess"]),
-                            decision=(decisions or {}).get(decision_key(record)),
-                            donor_image=None if is_bay else (donor_images or {}).get(record["donor_id"]),
-                            keep=np.isin(labels, accepted_labels) if is_bay and accepted_labels else None)
+                            label, ccfg, keep=keep, **transfer_args(record))
             accepted, is_painted = info["acceptance"]["accepted"], info["acceptance"]["painted"]
             expert, reasons = info["acceptance"].get("expert"), info["acceptance"]["reasons"]
             if not is_painted:
                 del label_names[str(label)]            # nothing carries this label; the number is reused
-            elif accepted and not is_bay:
-                accepted_labels.append(label)
+            elif accepted or is_bay:
+                kept_labels.append(label)
+            if is_painted and is_bay:
+                painted_bays.append((record, entry, label))
             status = REJECTED if expert == "reject" else "completed" if accepted else GUESS
             entry.update({"status": status, "flipped": bool(record["flipped"]),
                           "method": "donor_transfer" if is_painted else "none",
                           **({"label": label} if is_painted else {"pixels_changed": 0}), **info})
+            if info["surface"] == "new_work":
+                entry["not_drawn"] = NEW_WORK_NOT_DRAWN
+            elif info["surface"] == "clean_copy":
+                entry["not_drawn"] = CLEAN_COPY_NOT_DRAWN
             if expert == "reject":
                 entry["note"] = f"{REJECTED}: {info['acceptance']['expert_note'] or 'no note'}"
             elif expert == "approve":
@@ -705,6 +920,13 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
                                  + ("; an expert decision exists for another placement and was ignored"
                                     if expert == "stale" else ""))
         results.append(entry)
+    for record, entry, label in painted_bays:           # what is still open in the bay's box
+        info = transfer(out, labels, rgb, damage, record, donor_mask_for(record, donor_masks, damage.shape),
+                        label, ccfg, keep=np.isin(labels, kept_labels), **transfer_args(record))
+        x1, y1, x2, y2 = record["target_box"]
+        entry["pixels_painted"] += info["pixels_painted"]
+        entry["margin_px"] = info["pixels_painted"]
+        entry["damage_px_in_box_left_unfilled"] = int(((damage[y1:y2, x1:x2] > 0) & (labels[y1:y2, x1:x2] == 0)).sum())
     for entry in results:  # final count after overlaps: pixels whose visible label is this target
         if entry.get("label"):
             entry["pixels_changed"] = int((labels == entry["label"]).sum())

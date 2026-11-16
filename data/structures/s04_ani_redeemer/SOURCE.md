@@ -53,3 +53,9 @@ assistant's (reasons below), the author left it open.
 - Mask version 1 is drawn. If wanted: erase it where it lies on standing stone (mask pixels are the only pixels the pipeline may change).
 - Replace the assistant's draft inventory (13 boxes of the lower arcade only, `source: assistant_draft`, run `outputs/s04_ani_redeemer/20261115_132443`) by an inventory of your own in the editor; the upper arcade is not in it.
 - Decide whether `image.png` is committed (the licence allows it with attribution).
+
+Mask v2 (2026-11-16, the assistant's draft, a trial the author asked for): the author's v1 plus the rubble
+heap before the breach, for x 700 to 1180 from the lower edge of v1 down to a ground line y = 1880 chosen
+by the assistant (33,058 px added). File `damage_mask_v2_assistant_draft_20261116.png`, in use as
+`damage_mask.png`; v1 is kept as `damage_mask_v1_author_20261115.png`. To go back: copy v1 over
+`damage_mask.png`.

@@ -14,7 +14,7 @@
 | Branch | `fix/failure-analysis`, ahead of `main` (`v0.1.0`); not merged, which is the author's decision |
 | Structures | **n = 1 building with expert-checked results** (`s01_test_church`, 628 x 904). `s03_church_later` is a second photograph of the same building: detection only. `s04_ani_redeemer` (added 2026-11-15) is a **second building** with a known licence (CC BY-SA 2.0), 1501 x 1956: detection only so far, it waits for the author's damage mask and inventory |
 | Reference run | `outputs/s01_test_church/20261114_170229` (generative fill off, the author's decisions applied). Open `report.html` in it |
-| Tests | 197 pass (`python -m unittest discover tests`, no GPU) |
+| Tests | 201 pass (`python -m unittest discover tests`, no GPU) |
 
 Statements marked **(guess)** are the assistant's reading, not a measurement.
 
@@ -187,12 +187,23 @@ Ordered by how much they limit a presentable result.
   shared with the next arch; NCC 0.39 and 0.29); `proposal.png` shows photograph
   and unmarked proposal side by side. The restoration view is still empty: a bay copy is an analogy and
   is never restored. T39d (side margin, so the copy carries the whole shared support and the neighbouring arch feet) is
-  checked only in a preview, `outputs/s04_ani_redeemer/preview_T39d.png`: the evidence step cannot run
-  since Windows Application Control blocks a torch DLL (WinError 4551, 2026-11-16).
+  run as `outputs/s04_ani_redeemer/20261116_160549` (bays 127,623 px, first-construction 130,901 px, no
+  damage pixel of a bay box left unfilled; open its `report.html`). s01 run `20261116_160656`: restoration
+  byte-identical. Windows Smart App Control blocked a torch DLL on 2026-11-16 (WinError 4551) until the
+  author turned it off. Seen in the picture: a vertical seam at the left edge of the copy and the donor's
+  lichen patch repeated above the arch.
+  T39e (same day, after the author's remark that the colonnettes stand too far right): draft arch boxes
+  corrected to the measured capital centres and the bay's vertical search limited
+  (`complete.bay_shift_frac`); newest run `outputs/s04_ani_redeemer/20261116_163713` (bays 127,464 px,
+  12 targets, no B2 slot any more). s01 run `20261116_163835`: restoration byte-identical.
+  T40 (same day, the author: an addition must read as clean new work and must not repeat the donor's
+  lichen or a possible inscription): a bay is drawn in one stone tone, plain wall flat, arch ring and
+  supports with the donor's light and shade (`complete.bay_surface: new_work`); what is left out is listed
+  in `report.html`. Newest runs: s04 `20261116_172024`, s01 `20261116_171939` (restoration byte-identical).
   Open in the picture: the nonsense B2 slot at the left image edge. The placement follows the draft arch
   boxes and is as good as they are. Not judged by the author yet. From here on the
   s04 figures are not those of the unchanged pipeline.
-- **Needs the author.** (0) Look at `proposal.png` and `report.html` of run `20261116_130719` and say
+- **Needs the author.** (0) Look at `proposal.png` and `report.html` of run `20261116_200639` and say
   whether the bay copy is the product meant. (1) What to do with the band left of the building: remove it from the mask, or
   ask for a step that mirrors the building's right half into it (a large guess). (2) Review the five
   placements. (3) An inventory of their own, including the upper arcade.

@@ -106,6 +106,8 @@ def target_block(entry: dict) -> str:
         "<div>Why a guess: " + (esc("; ".join(reasons)) if reasons else "&ndash; (passed the automatic tests)") + "</div>",
         f"<div>Expert decision: <b>{expert_text}</b></div>",
     ]
+    if place.get("not_drawn"):         # a bay drawn as new work: what it leaves out, for the expert's comment
+        lines.insert(-1, f"<div>Drawn as new work. Not drawn: {esc(place['not_drawn'])}</div>")
     choice = entry.get("donor_choice")
     if choice:
         lines.insert(3, "<div class=meta>donor chosen by the expert instead of "

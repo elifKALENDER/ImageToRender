@@ -44,7 +44,7 @@ support, never a restoration decision. The owner is an architect and writes in T
 - Re-run: `python run.py --structure s01_test_church --from damage --view both --no-review`.
 
 ## Resume here (written 2026-11-15, end of session; T39 added 2026-11-16)
-Branch `fix/failure-analysis`, 197 tests. Start by reading `docs/STATUS.md`, then this list.
+Branch `fix/failure-analysis`, 201 tests. Start by reading `docs/STATUS.md`, then this list.
 
 **T39 done 2026-11-16 (bay donor B3 + `proposal.png`, commit `7d59b36`, pushed) and T39b, T39c the same day (bay
 widened to its supports, gain colour match, bay anchored where its arch meets the neighbours so the
@@ -54,10 +54,46 @@ first-construction view by a copy of the neighbouring bay (two bay guesses, 125,
 still empty by rule. s01 run `20261116_130853`: restoration byte-identical, one bay guess.
 The bay placement follows the arch boxes of the inventory (on s04 the assistant's draft).
 **T39d (bay box reaches `bay_side_margin` beyond each anchor: whole shared support and the neighbouring
-arch feet) is coded and tested but seen only in a preview**, `outputs/s04_ani_redeemer/preview_T39d.png`:
-on 2026-11-16 Windows Application Control began to block `torch/lib/shm.dll` (WinError 4551), so the
-evidence step cannot run. Do not work around the policy; the author has to allow it. Then re-run s04 and
-s01 `--from evidence` and update the figures in `docs/TASKS.md` (T39d) and `docs/STATUS.md`. The paragraph below is the remark
+arch feet), commit `7cde56b`**: s04 run `outputs/s04_ani_redeemer/20261116_160549` (bays 127,623 px,
+first-construction 130,901 px, none of the bay boxes' damage left unfilled), s01 run `20261116_160656`
+(restoration byte-identical, bay guess 3,891 px). Waiting for the author's judgement of `proposal.png` of
+the s04 run; seen by the assistant: a vertical seam at the left edge of the copy, the donor's lichen patch
+repeated above the arch. Windows Smart App Control blocked `torch/lib/shm.dll` on 2026-11-16
+(WinError 4551); the author turned it off the same day.
+**T39e (uncommitted unless the git log shows it):** the author found the copied colonnettes too far right;
+the draft arch boxes were corrected to measured capital centres (corrected inventory lives in the run
+folders from `20261116_163448` on) and `complete.bay_shift_frac` (0.02) limits a bay's vertical search.
+Newest s04 run `outputs/s04_ani_redeemer/20261116_163713` (12 targets, bays 127,464 px), newest s01 run
+`20261116_163835` (restoration byte-identical). The author wants this bay settled first, then to go on to
+the other sides of the building. No perspective warp exists (box-to-box scale only).
+**The author's requirement of 2026-11-16 (take up first):** the added part must look like new work
+(clean, not glossy, readable as added, Venice Charter), must not repeat the donor's lichen or a possible
+inscription, and the base must not be invented. **T40 (uncommitted unless the git log shows it)** does
+this: `complete.bay_surface: new_work` (default) draws a bay in one stone tone, plain wall flat, arch ring
+and supports (found by geometry from the arch box and anchors, `complete.bay_relief_zone`; the SAM masks
+were not usable) with the donor's light and shade; `not_drawn` is listed in `report.html`. Newest runs:
+s04 `outputs/s04_ani_redeemer/20261116_172024`, s01 `20261116_171939` (restoration byte-identical).
+Waiting for the author's judgement of the s04 `proposal.png`. Known: no course lines, ring and colonnettes
+pinkish and soft, capital's right end clipped, no perspective warp. Then the other bays of s04.
+**T40b (same day, uncommitted unless the git log shows it):** the author judged it: colonnette too far
+right (fixed: junction of `draft_arch_05`/`_06` measured at x = 1135; bays painted most damaged first,
+never over each other; `complete.new_work_light_limits`; newest runs s04 `20261116_193628`, s01
+`20261116_193754`), drawing quality "terrible" (open, next: the author prefers a realistic result, by
+copying or by generation), and the rubble in front of the wall (open question, asked back).
+**T41 (same day, uncommitted unless the git log shows it):** the author chose "copy and clean the lichen"
+and, as a trial, to draw the bay down to the ground through the rubble. `complete.bay_surface:
+clean_copy` (default; `complete.clean_copy_surface`); the s04 mask in use is the assistant's draft v2
+(rubble before the breach added down to y = 1880; the author's v1 is kept beside it). Newest s04 run
+`outputs/s04_ani_redeemer/20261116_195512`. **T41b (same day, uncommitted unless the git log shows it):**
+the author found it "not bad" but pasted and too weathered: an addition should read as newly built
+without standing out, and standing wall must not be painted. Now the cleaned copy is turned into one
+stone colour at lowered contrast (`clean_copy_new_stone`, `clean_copy_contrast`), a donor in other light
+is not painted, bays do not paint into each other's span. Newest s04 run
+`outputs/s04_ani_redeemer/20261116_200639`; waiting for the author's judgement of its `proposal.png`.
+Known flaws are listed in the T41b note of `docs/TASKS.md`. The author also asked what this gains over
+an image model (Gemini): answered (provenance, no invention, untouched original, repeatability); a
+combination (our geometry and mask, a generative surface marked as AI guess) is offered, not decided;
+sending a photograph to a cloud service is the author's decision. The paragraph below is the remark
 that led to T39.
 
 **The author's last remark before closing (2026-11-15), the first thing to take up:** the analyses are

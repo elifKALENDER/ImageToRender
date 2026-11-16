@@ -148,7 +148,75 @@ class BayTest(unittest.TestCase):
     placement."""
 
     def bay(self) -> dict:
-        return {**record("B", "t_002", confidence=0.0), "kind": complete.BAY, "rule": "B3", "class": "bay"}
+        base = record("B", "t_002", confidence=0.0)
+        x1, y1, x2, y2 = base["donor_box"]
+        # the arch takes the upper half of the donor bay and springs from its two edges
+        basis = {"donor_arch_box": [x1, y1, x2, (y1 + y2) // 2], "donor_anchors": [float(x1), float(x2)],
+                 "damage_share": 0.5, "anchors": [float(base["target_box"][0]), float(base["target_box"][2])]}
+        return {**base, "kind": complete.BAY, "rule": "B3", "class": "bay", "basis": basis}
+
+    def test_clean_copy_keeps_the_stone_and_drops_a_light_patch_and_a_hidden_foot(self) -> None:
+        ccfg = dict(config()["complete"])
+        rng = np.random.default_rng(0)
+        image = np.clip(rng.normal(60, 3, (80, 60, 3)), 0, 255).astype(np.uint8)
+        image[40, :] = 40                                   # a course joint
+        image[10:20, 10:25] = 200                           # lichen
+        image[70:, :] = 180                                 # the donor's foot behind grass
+        mask = np.ones((80, 60), bool)
+        out, cleaned, hidden = complete.clean_copy_surface(image, mask, np.zeros((80, 60), bool), ccfg)
+        self.assertEqual(hidden, 10)
+        self.assertGreaterEqual(cleaned, 150)
+        self.assertLess(out[10:20, 10:25].mean(), 80)       # patch gone
+        self.assertLess(out[70:].mean(), 80)                # foot continued as wall
+        self.assertLess(out[40, 30:].mean(), out[45, 30:].mean() - 10)   # joint kept
+        self.assertGreater(out[50:60].std(), 1.0)           # grain kept, not one flat tone
+
+    def test_a_bay_leaves_the_span_of_a_neighbouring_bay_to_that_bay(self) -> None:
+        rgb, damage, _, _ = scene()
+        cfg = config()
+        cfg["complete"]["bay_surface"] = "copy"
+        first = self.bay()
+        x1, y1, x2, y2 = first["target_box"]
+        damage[y1:y2, x1:x2] = 1
+        mid = (x1 + x2) // 2
+        # the second bay claims the right half of the first one's box as its own span
+        second = {**self.bay(), "target_id": "t_003",
+                  "basis": {**first["basis"], "anchors": [float(mid), float(x2)], "damage_share": 0.1}}
+        _, labels, report = complete.complete_view("first_construction", rgb, damage, [first, second], {}, cfg)
+        by_id = {e["target_id"]: e for e in report["targets"]}
+        self.assertFalse((labels[y1:y2, mid + 1:x2] == by_id["t_002"]["label"]).any())
+        self.assertTrue((labels[y1:y2, mid + 1:x2] == by_id["t_003"]["label"]).any())
+        self.assertTrue((labels[y1:y2, x1:mid] == by_id["t_002"]["label"]).any())
+
+    def test_relief_zone_is_the_arch_ring_and_the_supports(self) -> None:
+        settings = {"new_work_ring_share": 0.1, "new_work_support_share": 0.05}
+        zone = complete.bay_relief_zone([0, 0, 100, 200], [0, 20, 100, 90], [0.0, 100.0], settings)
+        self.assertEqual(zone.shape, (200, 100))
+        self.assertTrue(zone[22, 50])                   # the crown: radius 50 about (50, 70)
+        self.assertFalse(zone[60, 50])                  # the field under the arch
+        self.assertFalse(zone[5, 50])                   # the wall above the arch
+        self.assertTrue(zone[150, 2] and zone[150, 97])  # the two supports
+        self.assertFalse(zone[150, 50])                 # the wall between them
+
+    def test_new_work_surface_has_one_tone_and_drops_a_light_patch_on_the_wall(self) -> None:
+        rgb, damage, _, _ = scene()
+        x1, y1, x2, y2 = DONOR_BOX
+        rgb[y1:y2, x1:x2] = (90, 60, 50)                           # a plain wall bay ...
+        rgb[y1 + 2:y1 + 8, x1 + 20:x1 + 30] = (230, 230, 230)      # ... with a lichen patch above the arch
+        cfg = config()
+        cfg["complete"]["bay_surface"] = "new_work"
+        out, labels, report = complete.complete_view("first_construction", rgb, damage, [self.bay()], {}, cfg)
+        entry = report["targets"][0]
+        self.assertEqual(entry["surface"], "new_work")
+        self.assertEqual(entry["not_drawn"], complete.NEW_WORK_NOT_DRAWN)
+        painted = out[labels > 0].astype(int)
+        self.assertGreater(len(painted), 0)
+        self.assertLess(painted.max(), 200)                        # the patch is not carried over
+        copy = config()
+        copy["complete"]["bay_surface"] = "copy"
+        _, _, report = complete.complete_view("first_construction", rgb, damage, [self.bay()], {}, copy)
+        self.assertEqual(report["targets"][0]["surface"], "copy")
+        self.assertNotIn("not_drawn", report["targets"][0])
 
     def test_bay_is_a_guess_in_first_construction_and_absent_from_restoration(self) -> None:
         rgb, damage, _, texture = scene()
@@ -174,6 +242,7 @@ class BayTest(unittest.TestCase):
         x1, y1, x2, y2 = DONOR_BOX
         rgb[y1:y2, x1:x2] = texture // 4                       # the donor bay stands in shadow
         cfg = config()
+        cfg["complete"]["bay_surface"] = "copy"                # the colour match belongs to the plain copy
         out, _, report = complete.complete_view("first_construction", rgb, damage, [self.bay()], {}, cfg)
         entry = report["targets"][0]
         self.assertEqual(entry["colour_gain"], [1.5, 1.5, 1.5])               # the upper limit, not 4

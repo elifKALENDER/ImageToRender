@@ -773,6 +773,7 @@ def tier_b3_bays(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[
                 "basis": {"row": [e["id"] for e in row], "arch": arch["id"], "donor_arch": donor["id"],
                           "damage_share": round(share, 4),
                           "anchors": [round(al, 1), round(ar, 1)], "donor_anchors": [round(dl, 1), round(dr, 1)],
+                          "donor_arch_box": list(donor["box"]),
                           "note": "analogy with the neighbouring bay; no confidence measure"},
             })
     return targets, {"bay_rows": rows_info}
