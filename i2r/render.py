@@ -19,6 +19,9 @@ Once per run:
                          (first-construction view only) generative pixels in magenta over the faded
                          photograph, open damage hatched; empty of magenta while the generative fill is
                          off. Delivered with first_construction.png, never apart (§5.4).
+    proposal.png         (first-construction view only) photograph | unmarked first-construction
+                         completion, side by side: what the proposal looks like. Guesses are in it and
+                         are not marked; first_construction.png marks them.
     report.html          one page with the views, the figures and every placed donor (i2r/report.py);
                          input.png is the photograph it shows
     targets_overlay.png  elements (thin, by class) and targets (by tier), with the bar
@@ -375,6 +378,27 @@ def with_bar(image: np.ndarray, rcfg: dict, view: str | None, items: list | None
     return np.vstack([image, bar(image.shape[1], rcfg, view, items)])
 
 
+PROPOSAL = "proposal.png"
+PROPOSAL_CAPTIONS = ("photograph", "proposal: every placement, guesses included, unmarked")
+
+
+def proposal_image(photo: np.ndarray, completed: np.ndarray, rcfg: dict) -> np.ndarray:
+    """The photograph and the unmarked first-construction completion side by side, each under a caption,
+    with the label bar. What the proposal would look like; which pixels are guesses is shown by
+    first_construction.png, never by this image."""
+    ts = float(rcfg["text_scale"])
+    gap = np.full((photo.shape[0], max(2, int(round(4 * ts))), 3), 20, np.uint8)
+    strips = []
+    for text, image in zip(PROPOSAL_CAPTIONS, (photo, completed)):
+        strip = np.full((int(round(24 * ts)), image.shape[1], 3), 20, np.uint8)
+        cv2.putText(strip, text, (int(round(6 * ts)), int(round(17 * ts))), FONT, 0.45 * ts, (255, 255, 255),
+                    text_thickness(ts), cv2.LINE_AA)
+        strips.append(strip)
+    pair = np.vstack([np.hstack([strips[0], gap[:strips[0].shape[0]], strips[1]]), np.hstack([photo, gap, completed])])
+    return with_bar(pair, rcfg, "first_construction", [((240, 240, 240),
+                                                        "unmarked; guesses are marked in first_construction.png")])
+
+
 # ---------------------------------------------------------------------------
 # Provenance
 # ---------------------------------------------------------------------------
@@ -523,6 +547,10 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
                                  rcfg, view, source_map_legend(map_gen is not None))).save(
             run.path(f"{view}_source_map.png"))
         if view == "first_construction":
+            # without generated pixels when those are shown apart (the same rule as for the view image)
+            plain = base if gen_label and display == "separate" else completed
+            Image.fromarray(proposal_image(photo, plain, rcfg)).save(run.path(PROPOSAL))
+            extras.setdefault(view, {})["proposal_image"] = PROPOSAL
             overlay, generative_px = conjecture_overlay(photo, damage, labels, report, rcfg)
             Image.fromarray(with_bar(overlay, rcfg, view, conjecture_legend(rcfg))).save(
                 run.path("first_construction_conjecture_overlay.png"))

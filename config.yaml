@@ -217,6 +217,19 @@ evidence:
     # B2: vertical axis x in image pixels, given by the author; null = estimate from the elements.
     # Set it per building in data/structures/<id>/structure.yaml.
     symmetry_axis_x: null
+    # B3 (bay donor): a damaged bay of an arcade is filled with a copy of the nearest intact bay of the
+    # same arch row: arch, supports and the plain wall between them, which no element rule can fill.
+    # Always a guess (first-construction view and proposal.png only, never the restoration view).
+    bays_enabled: true
+    bay_arch_class: arch
+    bay_support_classes: [pilaster, column]   # the bay ends at the bottom of the intact supports under the arch
+    # A bay whose box is damaged by at most this share is a donor; above it, a target.
+    bay_donor_max_damage: 0.05      # initial guess, not calibrated
+    # Donor and target arch must agree in width and height within 1 +/- this (as evidence.size_tolerance).
+    bay_size_tolerance: 0.35        # initial guess, not calibrated
+    # The bay starts this many arch heights above the arch box (the wall up to the cornice). 0 = at the
+    # arch. Set it per building in data/structures/<id>/structure.yaml.
+    bay_top_extension: 0.0
 
 complete:
   # Donor transfer (docs/ARCHITECTURE.md §5.5).

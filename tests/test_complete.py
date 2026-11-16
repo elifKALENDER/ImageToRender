@@ -143,6 +143,46 @@ class FirstConstructionTest(unittest.TestCase):
         self.assertFalse((differ & ~inside_b).any())
 
 
+class BayTest(unittest.TestCase):
+    """B3: a bay copy is aligned, always a guess, never in the restoration view, never over an accepted
+    placement."""
+
+    def bay(self) -> dict:
+        return {**record("B", "t_002", confidence=0.0), "kind": complete.BAY, "rule": "B3", "class": "bay"}
+
+    def test_bay_is_a_guess_in_first_construction_and_absent_from_restoration(self) -> None:
+        rgb, damage, _, texture = scene()
+        # no element mask is needed for the donor: the whole donor box counts
+        out, labels, report = complete.complete_view("first_construction", rgb, damage, [self.bay()], {}, config())
+        entry = report["targets"][0]
+        self.assertEqual(entry["status"], complete.GUESS)
+        self.assertEqual(entry["acceptance"]["reasons"], [complete.BAY_GUESS_REASON])
+        self.assertEqual((entry["alignment"]["dx"], entry["alignment"]["dy"]), SHIFT)   # aligned like tier A
+        self.assertTrue(np.array_equal(out[60, 75], texture[60 - 10 - SHIFT[1], 75 - 60 - SHIFT[0]]))
+        self.assertTrue(np.all(damage[labels > 0] == 1))
+        for include_b in (False, True):                       # not even with restoration.include_tier_b
+            restored, _, report = complete.complete_view("restoration", rgb, damage, [self.bay()], {},
+                                                         config(include_tier_b=include_b))
+            self.assertEqual(report["targets"][0]["status"], "not_completed")
+            self.assertTrue(np.array_equal(restored, rgb))
+
+    def test_bay_does_not_cover_an_accepted_placement_but_covers_a_guess(self) -> None:
+        rgb, damage, mask, _ = scene()
+        damage[75:88, 95:115] = 1                              # a second hole, for the tier B slot
+        slot = record("B", "t_003", box=[95, 75, 115, 88], confidence=0.5)
+        bay = {**self.bay(), "target_box": [55, 5, 118, 88], "donor_box": [5, 5, 68, 88]}
+        records = [record("A"), bay, slot]
+        alone, alone_labels, _ = complete.complete_view("first_construction", rgb, damage, [record("A")],
+                                                        {"donor": mask}, config())
+        _, labels, report = complete.complete_view("first_construction", rgb, damage, records, {"donor": mask}, config())
+        by_id = {e["target_id"]: e for e in report["targets"]}
+        self.assertEqual(by_id["t_001"]["status"], "completed")
+        # the accepted tier A pixels keep their label; the slot guess under the bay is covered
+        self.assertTrue(np.array_equal(labels == by_id["t_001"]["label"], alone_labels > 0))
+        self.assertEqual(by_id["t_003"]["pixels_changed"], 0)
+        self.assertGreater(by_id["t_002"]["pixels_changed"], 0)
+
+
 class PreservationTest(unittest.TestCase):
     def test_a_change_outside_the_mask_fails_the_view(self) -> None:
         rgb, damage, donor_mask, _ = scene()

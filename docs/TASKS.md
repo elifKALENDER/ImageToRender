@@ -15,6 +15,7 @@
   after it; in practice Phase 1 continued on `refactor/structure` and no `feat/pipeline` branch exists.
 - **Status (2026-11-12): T01 to T21, T24, T12b and T16b are done (T22-T23 skipped). T25: done; `main` was
   fast-forwarded to the branch and tagged `v0.1.0` on 2026-11-12. This stage is complete.**
+- **T39 (bay donor B3, `proposal.png`) done 2026-11-16; its results wait for the author's judgement.**
 - **After v0.1.0: T26 and T28 to T38 are done (2026-11-15). T27: the mechanism is done, but point 5 of the
   failure analysis is not solved by the hull and waits for the author (mask redraw or a `facade_mask.png`).
   Phase 3 has no open coding task; what is open is the author's manual input (see `docs/STATUS.md`).** Author decision
@@ -820,6 +821,31 @@ the highest `t_002` has had: one more case where the two tests do not see what t
 The base is unchanged (score 0.23). A mask has to be looked at before it is trusted; drawing it by hand
 is not implemented. 187 tests.*
 **Files.** `tools/reference_donors.py`, `i2r/references.py`, `i2r/complete.py`, `tests/test_references.py`.
+
+### T39. Bay donor (rule B3) and the unmarked proposal image (added 2026-11-16, asked by the author)
+*Status: done 2026-11-16, not committed unless the log shows it. Reason: on s04 the analyses were there
+but no restoration product; plain wall is not an element, so nothing could fill it.
+**B3** (`evidence.tier_b3_bays`): a bay = the box of an arch of a row, from `bay_top_extension` arch
+heights above it down to the bottom of the intact supports under it. A bay damaged by at most
+`bay_donor_max_damage` (0.05) is a donor; any other arch of the row gets the nearest donor bay whose arch
+agrees within `bay_size_tolerance` (0.35). Record: kind and class `bay`, tier B, confidence 0. The
+complete step copies the whole donor box (no element mask), aligns it to the surviving pixels like tier A,
+paints bays last (over element guesses, never over an accepted placement) and always as a guess; a bay is
+never in the restoration view, also not with `restoration.include_tier_b`. **`proposal.png`** (render):
+photograph | unmarked first-construction completion, side by side; first on `report.html`.
+s04 (run `20261116_091340`, draft inventory, `bay_top_extension` 0.95 in its `structure.yaml`): two bay
+guesses, 117,248 px (bay of `draft_arch_05` 99,403 px, alignment score 0.45; of `draft_arch_04` 17,845 px,
+0.41), both on the scale bound 0.94; first-construction view 120,526 px (was 33,763), restoration view
+still 0. Left open: a strip at the right edge of the breach (the bay ends at the arch box), the bays of
+`draft_arch_01`, `_06`, `_07` (no donor within the size tolerance), everything outside the facade limit.
+The copy looks flatter than its surroundings (one mean colour shift, bilinear resize). **With B3 the s04
+result is no longer a run of the unchanged pipeline.** s01 (run `20261116_091352`): restoration image
+byte-identical; one bay guess (`arch_004` from `arch_007`, across the apse, score 0.31, 3,945 px);
+21 targets (7 A, 1 B, 13 C); first-construction 10,029 px. The bay alignment search takes about 2 minutes
+per bay on s04 (same search as tier A on a large box). No bay has been judged by the author. 194 tests.*
+**Files.** `i2r/evidence.py`, `i2r/complete.py`, `i2r/render.py`, `i2r/report.py`, `config.yaml`,
+`data/structures/s04_ani_redeemer/structure.yaml`, `tests/test_evidence_b.py`, `tests/test_complete.py`,
+`tests/test_render.py`.
 
 ---
 

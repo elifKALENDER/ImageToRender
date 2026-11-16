@@ -27,6 +27,10 @@ Tier B, implied slots with no visible fragment (geometry only, ``TIER_B_RULES``)
         structure.yaml, else estimated from same-class pairs) under the same slot conditions; the donor
         is flipped. Confidence = axis agreement x donor score. Switched off, and logged, when the
         agreement is below ``symmetry_min_agreement``.
+    B3  a damaged bay of an arcade (arch box down to the bottom of its supports) takes the nearest
+        intact bay of the same arch row as donor: arch, supports and the wall between them together.
+        An analogy between neighbours, not evidence about the damaged bay: confidence 0, always a guess,
+        never in the restoration view (``tier_b3_bays``).
 Tier C: every damage pixel outside all A and B target boxes, as connected regions of at least
 ``damage.min_region_px``, confidence 0. Fragmented elements without a donor are also tier C records.
 Facade limit (T27): an author's ``facade_mask.png`` in the building's folder, else the convex hull of the
@@ -647,11 +651,100 @@ def implied_target(rule: str, element_class: str, box: list[int], donor: dict, f
     }
 
 
-# Each rule: (elements, damage, tier_b settings) -> (targets, diagnostics). Rules B3, B4 (bays, courses)
-# would be further entries (docs/ARCHITECTURE.md §9).
+BAY = "bay"      # record kind and class of a B3 target: one bay of an arcade, wall and supports included
+
+
+def bay_bottom(arch: dict, active: list[dict], bcfg: dict) -> int | None:
+    """Lower end of the bay under ``arch``: the lowest bottom of the intact supports standing under it
+    (centre within the arch's width, widened by ``row_tolerance``; reaching below the arch). None when
+    no intact support is recorded there."""
+    x1, _, x2, y2 = arch["box"]
+    w, h = box_size(arch["box"])
+    margin = float(bcfg["row_tolerance"]) * w
+    bottoms = [e["box"][3] for e in active
+               if e["class"] in bcfg["bay_support_classes"] and e["damage_status"] == "intact"
+               and x1 - margin <= box_centre(e["box"])[0] <= x2 + margin
+               and e["box"][1] < y2 + h and e["box"][3] > y2]
+    return max(bottoms) if bottoms else None
+
+
+def tier_b3_bays(elements: list[dict], damage: np.ndarray, bcfg: dict) -> tuple[list[dict], dict]:
+    """B3: a damaged bay of an arcade takes the whole neighbouring bay (arch, supports and the wall
+    between them) as its donor.
+
+    A bay is the box of an arch of a row, from ``bay_top_extension`` arch heights above the arch down to
+    the bottom of the intact supports under it. A bay whose box is damaged by at most
+    ``bay_donor_max_damage`` is a donor. Every other arch of the row becomes a target when a donor bay
+    exists whose arch agrees in width and height within ``bay_size_tolerance`` (the nearest one wins);
+    its box has the donor's proportions: the arch's own width, the donor's height scaled by the two arch
+    heights. The record's donor is the donor bay's arch, its ``donor_box`` the donor bay.
+
+    This is an analogy between neighbours, not evidence about the damaged bay: confidence is 0 and the
+    complete step always places it as a guess."""
+    tol = float(bcfg["row_tolerance"])
+    size_tol = float(bcfg["bay_size_tolerance"])
+    limit = float(bcfg["bay_donor_max_damage"])
+    top = float(bcfg["bay_top_extension"])
+    height, width = damage.shape
+    active = active_elements(elements)
+    targets, rows_info = [], []
+
+    def bay_box(arch: dict, depth: float) -> list[int]:
+        x1, y1, x2, _ = arch["box"]
+        h = box_size(arch["box"])[1]
+        return [max(0, x1), max(0, int(round(y1 - top * h))), min(width, x2), min(height, int(round(y1 + depth)))]
+
+    for row in group_rows([e for e in active if e["class"] == bcfg["bay_arch_class"]], tol):
+        info: dict[str, Any] = {"elements": [e["id"] for e in row], "bays": []}
+        rows_info.append(info)
+        donors = []
+        for arch in row:
+            bottom = bay_bottom(arch, active, bcfg)
+            if bottom is None:
+                continue
+            box = bay_box(arch, bottom - arch["box"][1])
+            if damage_share(box, damage) <= limit:
+                donors.append((arch, box))
+        donor_ids = {a["id"] for a, _ in donors}
+        for arch in row:
+            entry: dict[str, Any] = {"arch": arch["id"]}
+            info["bays"].append(entry)
+            if arch["id"] in donor_ids:
+                entry.update({"role": "donor", "box": next(b for a, b in donors if a["id"] == arch["id"])})
+                continue
+            fitting = [(a, b) for a, b in donors
+                       if all(abs(r - 1.0) <= size_tol for r in size_ratios(arch["box"], a["box"]))]
+            if not fitting:
+                entry.update({"role": "none", "reason": ("no intact bay in this row" if not donors else
+                                                         f"no intact bay within bay_size_tolerance {size_tol:.2f}")})
+                continue
+            cx = box_centre(arch["box"])[0]
+            donor, donor_box = min(fitting, key=lambda d: abs(box_centre(d[0]["box"])[0] - cx))
+            depth = (donor_box[3] - donor["box"][1]) * box_size(arch["box"])[1] / box_size(donor["box"])[1]
+            box = bay_box(arch, depth)
+            share = damage_share(box, damage)
+            entry.update({"box": box, "damage_share": round(share, 4)})
+            if share <= limit:
+                entry.update({"role": "none", "reason": f"damage share at or below bay_donor_max_damage {limit:.2f}"})
+                continue
+            entry.update({"role": "target", "donor": donor["id"]})
+            targets.append({
+                "kind": BAY, "rule": "B3", "element_id": None, "class": BAY, "tier": TIER_B, "reason": None,
+                "target_box": box, "donor_id": donor["id"], "donor_box": donor_box, "flipped": False,
+                "similarity": None, "confidence": 0.0, "alternatives": [],
+                "basis": {"row": [e["id"] for e in row], "arch": arch["id"], "donor_arch": donor["id"],
+                          "damage_share": round(share, 4),
+                          "note": "analogy with the neighbouring bay; no confidence measure"},
+            })
+    return targets, {"bay_rows": rows_info}
+
+
+# Each rule: (elements, damage, tier_b settings) -> (targets, diagnostics). B4 (courses) would be a
+# further entry (docs/ARCHITECTURE.md §9).
 TIER_B_RULES: dict[str, tuple[str, Callable[[list[dict], np.ndarray, dict], tuple[list[dict], dict]]]] = {
     "B1": ("rows_enabled", tier_b1_rows),
     "B2": ("symmetry_enabled", tier_b2_symmetry),
+    "B3": ("bays_enabled", tier_b3_bays),
 }
 
 
@@ -844,8 +937,10 @@ def draw_sheet(rgb: np.ndarray, damage: np.ndarray, records: list[dict[str, Any]
                   if r["donor_id"] else []) + r["alternatives"]
         for c in chosen:
             photo = (ref_images or {}).get(c["donor_id"])
-            img = (donor_crop(rgb, damage, elements[c["donor_id"]]["box"], box, None, c["flipped"]) if photo is None
-                   else donor_crop(photo, np.zeros(photo.shape[:2], np.uint8), elements[c["donor_id"]]["box"], box,
+            # a bay's donor is the donor arch's whole bay, not the arch box
+            donor_box = r["donor_box"] if r["kind"] == BAY else elements[c["donor_id"]]["box"]
+            img = (donor_crop(rgb, damage, donor_box, box, None, c["flipped"]) if photo is None
+                   else donor_crop(photo, np.zeros(photo.shape[:2], np.uint8), donor_box, box,
                                    None, c["flipped"]))
             score = f"{c['similarity']:.2f}" if c["similarity"] is not None else f"conf {r['confidence']:.2f}"
             tiles.append((img, f"{c['donor_id']} {score}{' F' if c['flipped'] else ''}"))
@@ -1008,6 +1103,10 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
             log.info("[evidence]   %s %-24s %s donor %s conf %.3f box %s | nearest %s at %s px", r["target_id"],
                      r["class"] + " slot", r["rule"], r["donor_id"], r["confidence"], r["target_box"],
                      near.get("element_id"), near.get("centre_distance_px"))
+        elif r["kind"] == BAY:
+            log.info("[evidence]   %s %-24s B3 donor bay of %s box %s <- %s, %.0f %% damaged", r["target_id"],
+                     "bay of " + r["basis"]["arch"], r["donor_id"], r["target_box"], r["donor_box"],
+                     100 * r["basis"]["damage_share"])
     for name, diag in b_diag.items():
         if "axis" in diag:
             axis = diag["axis"]
@@ -1021,6 +1120,11 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
                 for gap in row.get("gaps_not_interpolated", []):
                     log.info("[evidence] B1: gap %s not interpolated (%d slot(s) withheld): %s",
                              gap["between"], gap["slots_implied"], gap["reason"])
+        elif "bay_rows" in diag:
+            for row in diag["bay_rows"]:
+                log.info("[evidence] B3: arch row of %d: %s", len(row["elements"]),
+                         ", ".join(f"{b['arch']} {b['role']}" + (f" ({b['reason']})" if b.get("reason") else "")
+                                   for b in row["bays"]))
         elif not diag.get("enabled", True):
             log.info("[evidence] %s off: %s", name, diag["reason"])
     log.info("[evidence] tier C: %d region(s), %.1f %% of the damage pixels", len(c_records),

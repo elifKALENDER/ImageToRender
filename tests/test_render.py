@@ -128,6 +128,15 @@ class RenderTest(unittest.TestCase):
         for text in ("t_001", "t_002", 'src="restoration.png"', 'src="first_construction.png"', 'src="input.png"',
                      "targets/t_001_first_construction.png", "tools/target_review.py", "guess, needs expert"):
             self.assertIn(text, page, text)
+        # the unmarked proposal: photograph | first-construction completion, with captions and the bar
+        self.assertIn('src="proposal.png"', page)
+        proposal = np.asarray(Image.open(run.path("proposal.png")).convert("RGB"))
+        photo = np.asarray(Image.open(run.path("input.png")).convert("RGB"))
+        done = np.asarray(Image.open(run.path("first_construction_completed.png")).convert("RGB"))
+        h, w = photo.shape[:2]
+        top = int(round(24 * float(run.config["restoration"]["text_scale"])))      # the caption strip
+        self.assertTrue(np.array_equal(proposal[top:top + h, :w], photo))
+        self.assertTrue(np.array_equal(proposal[top:top + h, -w:], done))
         self.assertNotIn("http://", page)                           # self-contained: no external resource
         self.assertNotIn("https://", page)
         self.assertNotIn("<script", page)

@@ -43,8 +43,16 @@ support, never a restoration decision. The owner is an architect and writes in T
 - Reference runs: `outputs/s01_test_church/20261110_181914` (SAM-refined inventory, mask v3) and `outputs/s01_test_church/20261110_182638` (both views, latest). Develop from these, not from raw detections (oversized boxes).
 - Re-run: `python run.py --structure s01_test_church --from damage --view both --no-review`.
 
-## Resume here (written 2026-11-15, end of session)
-Branch `fix/failure-analysis`, everything pushed, 187 tests. Start by reading `docs/STATUS.md`, then this list.
+## Resume here (written 2026-11-15, end of session; T39 added 2026-11-16)
+Branch `fix/failure-analysis`, 194 tests. Start by reading `docs/STATUS.md`, then this list.
+
+**T39 done 2026-11-16 (bay donor B3 + `proposal.png`; uncommitted unless the git log shows it; status note
+in `docs/TASKS.md`).** s04 run `outputs/s04_ani_redeemer/20261116_091340`: the breach is filled in the
+first-construction view by a copy of the neighbouring bay (two bay guesses, 117,248 px, scores 0.45 / 0.41),
+restoration view still empty by rule. s01 run `20261116_091352`: restoration byte-identical, one bay guess.
+Waiting for the author's judgement of `proposal.png`. Known flaws: strip open at the right edge of the
+breach, flat look of the copy, about 2 minutes of alignment per bay. The paragraph below is the remark
+that led to T39.
 
 **The author's last remark before closing (2026-11-15), the first thing to take up:** the analyses are
 good, but no restoration product comes out: the placements are not really made. Checked on s04

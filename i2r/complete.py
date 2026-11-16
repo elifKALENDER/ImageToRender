@@ -61,6 +61,7 @@ DECISIONS_FILE = "target_decisions.json"      # in the building's folder; copied
 TARGETS_DIR = "targets"
 
 
+BAY = "bay"                          # evidence record kind: a whole bay copied from a neighbouring bay (B3)
 OUTSIDE_FACADE = "outside_facade"    # evidence record kind: damage pixels outside the facade limit (T27)
 OUTSIDE_FACADE_REASON = "tier C: outside the facade limit; not part of the building, never filled"
 
@@ -75,6 +76,8 @@ class PreservationError(ContractError):
 
 def rule_restoration(record: dict, config: dict) -> tuple[bool, str]:
     tier = record["tier"]
+    if record["kind"] == BAY:
+        return False, "bay copied from a neighbour: analogy, never restored (Venice Charter, §5.3)"
     if tier == "A":
         return True, "tier A: direct evidence"
     if tier == "B":
@@ -263,6 +266,12 @@ def seam_agreement(image: np.ndarray, mask: np.ndarray, photo: np.ndarray, damag
 
 TIER_B_GUESS_REASON = "tier B: position implied by a pattern, no fragment in the photograph"
 REFERENCE_GUESS_REASON = "donor from another photograph of the building"
+BAY_GUESS_REASON = "whole bay copied from a neighbouring bay: an analogy, not evidence about this bay"
+
+
+def donor_mask_for(record: dict, donor_masks: dict[str, np.ndarray], shape: tuple[int, int]) -> np.ndarray:
+    """The donor's element mask; for a bay the whole donor box counts (wall included)."""
+    return np.ones(shape, np.uint8) if record["kind"] == BAY else donor_masks[record["donor_id"]]
 
 
 def judge(alignment: dict, seam: float | None, tier: str, ccfg: dict, tier_b_is_guess: bool = False) -> list[str]:
@@ -311,18 +320,24 @@ def paint(out: np.ndarray, labels: np.ndarray, window: list[int], image: np.ndar
 def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.ndarray,
              record: dict, donor_mask: np.ndarray, label: int, ccfg: dict,
              paint_guess: bool = True, tier_b_is_guess: bool = False,
-             decision: dict | None = None, donor_image: np.ndarray | None = None) -> dict[str, Any]:
+             decision: dict | None = None, donor_image: np.ndarray | None = None,
+             keep: np.ndarray | None = None) -> dict[str, Any]:
     """Transfer one donor into one target. ``rgb`` is the untouched photograph (alignment and colour
     are measured on it); ``out`` and ``labels`` are written. A placement judged a guess (``judge``) is
     painted only when ``paint_guess``; the measurements are returned either way. ``decision`` is the
-    expert's entry for this target, if any: it applies only to the placement it names."""
+    expert's entry for this target, if any: it applies only to the placement it names. ``keep``
+    (image-sized, boolean) marks pixels this transfer must not paint over.
+
+    A bay (B3) is aligned to its surviving pixels like a tier A fragment, and is a guess whatever the
+    alignment says."""
     target_box = record["target_box"]
+    is_bay = record["kind"] == BAY
     # ``donor_image``: the donor stands on another photograph (T37); that one has no damage mask
     patch, usable = donor_patch(rgb if donor_image is None else donor_image,
                                 damage if donor_image is None else np.zeros(donor_image.shape[:2], np.uint8),
                                 donor_mask, record["donor_box"], bool(record["flipped"]))
     window = window_for(target_box, ccfg, damage.shape)
-    if record["tier"] == "A":
+    if record["tier"] == "A" or is_bay:
         alignment = align(rgb, damage, patch, usable, target_box, window, ccfg)
     else:
         alignment = {"scale": 1.0, "aspect": 1.0, "dx": 0, "dy": 0, "searched": False, "limits": None, "on_bound": [],
@@ -338,9 +353,11 @@ def transfer(out: np.ndarray, labels: np.ndarray, rgb: np.ndarray, damage: np.nd
         image = np.clip(image.astype(np.float32) + shift, 0, 255).astype(np.uint8)
         colour_shift = [round(float(v), 1) for v in shift]
     fill = mask & damage_w
+    if keep is not None:
+        fill &= ~keep[wy1:wy2, wx1:wx2]
     seam, seam_px = seam_agreement(image, mask, rgb[wy1:wy2, wx1:wx2], damage_w, fill,
                                    int(ccfg["seam_band_px"]), int(ccfg["seam_min_px"]))
-    reasons = judge(alignment, seam, record["tier"], ccfg, tier_b_is_guess)
+    reasons = [BAY_GUESS_REASON] if is_bay else judge(alignment, seam, record["tier"], ccfg, tier_b_is_guess)
     if donor_image is not None and ccfg["reference_donor_is_guess"]:
         reasons.append(REFERENCE_GUESS_REASON)
     accepted = not reasons
@@ -626,7 +643,10 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
     labels = np.zeros(damage.shape, dtype=np.uint16)
     label_names: dict[str, str] = {}
     results = []
-    for record in sorted(records, key=lambda r: (r["confidence"] or 0.0)):
+    accepted_labels: list[int] = []
+    # Bays last: a bay copy is one coherent piece, so it covers the element guesses under it, but never
+    # a placement that was accepted (by the tests or by the expert).
+    for record in sorted(records, key=lambda r: (r["kind"] == BAY, r["confidence"] or 0.0)):
         do_it, why = rule(record, config)
         entry = {"target_id": record["target_id"], "tier": record["tier"], "kind": record["kind"],
                  "donor_id": record.get("donor_id"), "rule_reason": why}
@@ -642,16 +662,20 @@ def complete_view(view: str, rgb: np.ndarray, damage: np.ndarray, records: list[
         else:
             label = len(label_names) + 1
             label_names[str(label)] = record["target_id"]
-            info = transfer(out, labels, rgb, damage, record, donor_masks[record["donor_id"]], label, ccfg,
-                            paint_guess=GUESS_IS_PAINTED[view],
+            is_bay = record["kind"] == BAY
+            info = transfer(out, labels, rgb, damage, record, donor_mask_for(record, donor_masks, damage.shape),
+                            label, ccfg, paint_guess=GUESS_IS_PAINTED[view],
                             # only where a guess is painted: restoration.include_tier_b stays a plain switch
                             tier_b_is_guess=GUESS_IS_PAINTED[view] and bool(config["first_construction"]["tier_b_is_guess"]),
                             decision=(decisions or {}).get(decision_key(record)),
-                            donor_image=(donor_images or {}).get(record["donor_id"]))
+                            donor_image=None if is_bay else (donor_images or {}).get(record["donor_id"]),
+                            keep=np.isin(labels, accepted_labels) if is_bay and accepted_labels else None)
             accepted, is_painted = info["acceptance"]["accepted"], info["acceptance"]["painted"]
             expert, reasons = info["acceptance"].get("expert"), info["acceptance"]["reasons"]
             if not is_painted:
                 del label_names[str(label)]            # nothing carries this label; the number is reused
+            elif accepted and not is_bay:
+                accepted_labels.append(label)
             status = REJECTED if expert == "reject" else "completed" if accepted else GUESS
             entry.update({"status": status, "flipped": bool(record["flipped"]),
                           "method": "donor_transfer" if is_painted else "none",
@@ -885,8 +909,10 @@ def run_step(run: "Run", opts: "argparse.Namespace") -> None:
                 record = by_id[e["target_id"]]
                 e["panel_file"] = f"{TARGETS_DIR}/{e['target_id']}_{view}.png"
                 e["decision_key"] = decision_key(record)
-                Image.fromarray(target_panel(rgb, damage, out, record, donor_masks[record["donor_id"]], e,
-                                             run.config["complete"], donor_images.get(record["donor_id"]))
+                Image.fromarray(target_panel(rgb, damage, out, record,
+                                             donor_mask_for(record, donor_masks, damage.shape), e,
+                                             run.config["complete"],
+                                             None if record["kind"] == BAY else donor_images.get(record["donor_id"]))
                                 ).save(run.path(e["panel_file"]))
         gen = view_report.get("generative")
         if gen is not None:

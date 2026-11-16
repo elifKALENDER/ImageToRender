@@ -5,3 +5,9 @@ detect:
   # from s01 (RND-001) because the element type is the same; not measured on this photograph.
   class_merge:
     column: pilaster
+evidence:
+  tier_b:
+    # Bay donor (B3): the breach reaches from the ground to just under the cornice, about one arch height
+    # (180 px) above the arch boxes of the draft inventory (arch top y = 1440, cornice about y = 1265).
+    # Read off the photograph by the assistant, not measured; set after the first run of 2026-11-15.
+    bay_top_extension: 0.95

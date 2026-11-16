@@ -223,5 +223,58 @@ class FacadeLimitTest(unittest.TestCase):
         self.assertEqual([r["kind"] for r in records], ["uncovered_region"])
 
 
+def arcade(supports_of: tuple[int, ...] = (0, 1, 2, 3)) -> list[dict]:
+    """Three arches (x 40-100, 100-160, 160-220; y 40-70) on supports at x = 40, 100, 160, 220 that reach
+    down to y = 150. ``supports_of`` lists the supports that are recorded."""
+    arches = [el(f"arch_{i}", "arch", 70 + 60 * i, 55, w=60, h=30) for i in range(3)]
+    supports = [el(f"pil_{i}", "pilaster", 40 + 60 * i, 110, w=8, h=80) for i in supports_of]
+    return arches + supports
+
+
+class TierB3BayTest(unittest.TestCase):
+    """B3: a damaged bay takes the nearest intact bay of its arch row as donor, wall included."""
+
+    def bays(self, elements: list[dict], damage: np.ndarray, **overrides) -> tuple[list[dict], dict]:
+        targets, diag = evidence.find_tier_b(elements, damage, bcfg(rows_enabled=False, symmetry_enabled=False,
+                                                                    **overrides))
+        return targets, diag["B3"]
+
+    def test_damaged_bay_gets_the_whole_neighbouring_bay(self) -> None:
+        damage = damaged([110, 60, 150, 150])                  # plain wall and arch foot of the middle bay
+        targets, diag = self.bays(arcade(), damage)
+        self.assertEqual(len(targets), 1)
+        t = targets[0]
+        self.assertEqual((t["kind"], t["rule"], t["class"], t["tier"]), ("bay", "B3", "bay", "B"))
+        self.assertEqual(t["target_box"], [100, 40, 160, 150])     # arch box down to the supports' bottom
+        self.assertIn(t["donor_id"], ("arch_0", "arch_2"))
+        self.assertEqual(t["donor_box"][1::2], [40, 150])
+        self.assertEqual((t["flipped"], t["confidence"]), (False, 0.0))
+        roles = {b["arch"]: b["role"] for b in diag["bay_rows"][0]["bays"]}
+        self.assertEqual(roles, {"arch_0": "donor", "arch_1": "target", "arch_2": "donor"})
+
+    def test_top_extension_adds_the_wall_above_the_arch(self) -> None:
+        targets, _ = self.bays(arcade(), damaged([110, 20, 150, 150]), bay_top_extension=1.0)
+        self.assertEqual(targets[0]["target_box"], [100, 10, 160, 150])
+        self.assertEqual(targets[0]["donor_box"][1], 10)
+
+    def test_no_donor_when_every_bay_is_damaged_or_too_different(self) -> None:
+        everywhere = damaged([40, 60, 220, 150])
+        self.assertEqual(self.bays(arcade(), everywhere)[0], [])
+        elements = arcade()
+        elements[1]["box"] = [100, 40, 130, 70]                # half as wide as its neighbours
+        targets, diag = self.bays(elements, damaged([105, 60, 125, 150]))
+        self.assertEqual(targets, [])
+        self.assertIn("bay_size_tolerance", diag["bay_rows"][0]["bays"][1]["reason"])
+
+    def test_no_bay_without_recorded_supports_and_none_for_an_intact_row(self) -> None:
+        self.assertEqual(self.bays(arcade(supports_of=()), damaged([110, 60, 150, 150]))[0], [])
+        self.assertEqual(self.bays(arcade(), damaged([300, 10, 340, 30]))[0], [])
+
+    def test_switch(self) -> None:
+        targets, diag = self.bays(arcade(), damaged([110, 60, 150, 150]), bays_enabled=False)
+        self.assertEqual(targets, [])
+        self.assertEqual(diag["enabled"], False)
+
+
 if __name__ == "__main__":
     unittest.main()

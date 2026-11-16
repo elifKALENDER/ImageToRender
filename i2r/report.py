@@ -140,6 +140,12 @@ def build(run: "Run", provenance: dict, damage_px: int) -> str:
     sid = provenance["structure_id"]
     run_dir = run.run_dir.as_posix()
     figures = [(INPUT_COPY, "Input photograph")]
+    proposal = next((info["proposal_image"] for info in provenance["views"].values() if info.get("proposal_image")), None)
+    proposal_html = "" if not proposal else (
+        f'<h2>Proposal</h2><div class="views"><figure><a href="{esc(proposal)}"><img src="{esc(proposal)}" '
+        'alt="photograph and unmarked proposal"></a><figcaption>Photograph and the full proposal, unmarked. '
+        "It contains guesses that no expert has approved; the first-construction view below marks them."
+        "</figcaption></figure></div>")
     for view, info in provenance["views"].items():
         figures.append((info["image"], f"{view.replace('_', ' ').capitalize()} view"))
         if info.get("ai_guess_image"):
@@ -162,6 +168,7 @@ def build(run: "Run", provenance: dict, damage_px: int) -> str:
 ba&#351;ka bir elemandan kopyalanm&#305;&#351; ve otomatik testleri ge&ccedil;mi&#351;tir; turuncu olanlar "tahmin"dir ve uzman onay&#305; bekler;
 taral&#305; alanlar i&ccedil;in foto&#287;rafta kan&#305;t yoktur ve bo&#351; b&#305;rak&#305;lm&#305;&#351;t&#305;r. Bu bir restorasyon karar&#305; de&#287;il, erken a&#351;ama karar deste&#287;idir.</div>
 
+{proposal_html}
 <h2>Views</h2>
 <div class="views">{figure_html}</div>
 

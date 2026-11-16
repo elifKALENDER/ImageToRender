@@ -436,7 +436,7 @@ ready benchmark of element crops.
 | Later stage | Seam in this design |
 |---|---|
 | Learned scoring or classification | `evidence.py` builds each record from a list of scoring functions; a learned scorer is one more function. Review decisions are logged per target from day one, so training data accumulates. |
-| Richer structural reasoning (bays, courses) | Tier B rules are separate functions. The archived Stage 3C logic can return as B3, B4. |
+| Richer structural reasoning (bays, courses) | Tier B rules are separate functions. The archived Stage 3C logic can return as B3, B4. B3 exists since T39 (2026-11-16) as a bay donor: a damaged bay of an arcade takes the whole neighbouring bay, always as a guess (`docs/TASKS.md` T39). |
 | Perspective rectification | Donor transfer takes a transform function; affine today, homography later. |
 | Multi-image and 3D | A structure folder may hold several images; the pipeline reads `image.png` today. Provenance records already name the source image. |
 | Better detectors | `detect.py` writes one fixed `elements.json` format; any detector that writes it can replace OWL-ViT. |
